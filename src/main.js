@@ -371,39 +371,59 @@ function goSeq(i) {
   else goView(it.v);
 }
 
+/* 지금 보는 시점이 속한 묶음 (광장·새 서울역…) */
+function groupOf(cam) {
+  return STAGES[state.stage].views?.find((v) => v.cam === cam)?.group || null;
+}
+function groupsList() {
+  const g = [];
+  for (const v of STAGES[state.stage].views || []) if (v.group && CAMS[v.cam] && !g.includes(v.group)) g.push(v.group);
+  return g;
+}
+
 function renderChips() {
   const st = STAGES[state.stage];
   const box = $('#chips');
   box.innerHTML = '';
+  // 묶음 탭: 고르면 그 묶음의 시점만 아래에 보여요
+  const gbox = $('#groups');
+  gbox.innerHTML = '';
+  const groups = groupsList();
+  const cur = groupOf(state.cam) || groups[0];
+  gbox.hidden = groups.length < 2;
+  for (const g of groups) {
+    const t = document.createElement('button');
+    t.className = 'tab' + (g === cur ? ' on' : '');
+    t.textContent = g;
+    t.setAttribute('role', 'tab');
+    t.setAttribute('aria-selected', String(g === cur));
+    t.addEventListener('click', () => { stopTour(); goView(st.views.find((v) => v.group === g && CAMS[v.cam])); });
+    gbox.append(t);
+  }
   if (state.stage === 'problems') {
     box.append(chip('전체 지도', state.focus == null, showProblemMap));
     for (const p of PROBLEMS) box.append(chip(`${p.n} ${p.title}`, state.focus === p.n, () => selectProblem(p), 'prob'));
   } else {
-    let group = null;
     for (const v of st.views) {
-      if (!CAMS[v.cam]) continue;
-      if (v.group && v.group !== group) {
-        group = v.group;
-        const g = document.createElement('span');
-        g.className = 'grp';
-        g.textContent = group;
-        box.append(g);
-      }
+      if (!CAMS[v.cam] || (groups.length > 1 && v.group !== cur)) continue;
       box.append(chip(v.label, state.cam === v.cam, () => goView(v)));
     }
   }
-  const tg = $('#toggles');
-  tg.innerHTML = '';
+  // 보기 옵션: '현황과 비교'만 바로 보이고, 나머지 레이어는 접어 둠
+  const tg = $('#toggles'), lay = $('#layers');
+  tg.innerHTML = ''; lay.innerHTML = '';
   for (const [id, label] of st.toggles) {
     const b = chip(label, state.tog.has(id), () => {
       state.tog.has(id) ? state.tog.delete(id) : state.tog.add(id);
       refresh();
     });
     b.setAttribute('aria-pressed', String(state.tog.has(id)));
-    if (id === 'cmp') b.classList.add('cmp');
-    tg.append(b);
+    if (id === 'cmp') { b.classList.add('cmp'); tg.append(b); } else lay.append(b);
   }
-  // 선택된 칩이 보이도록 스크롤
+  const lb = $('#btn-layers');
+  const nOn = st.toggles.filter(([id]) => id !== 'cmp' && state.tog.has(id)).length;
+  lb.textContent = `레이어${nOn ? ` ${nOn}` : ''} ${lay.hidden ? '▾' : '▴'}`;
+  lb.classList.toggle('on', nOn > 0);
   requestAnimationFrame(() => box.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }));
 }
 
@@ -457,12 +477,20 @@ function currentView() {
   return STAGES[state.stage].views?.find((v) => v.cam === state.cam);
 }
 
+function seqLabel(it) {
+  if (!it) return '';
+  if (it.kind === 'map') return '전체 지도';
+  if (it.kind === 'problem') return `${it.p.n}. ${it.p.title}`;
+  return it.v.label;
+}
+
 function renderCard() {
   const card = $('#card');
   const seq = sequence();
   const idx = seqIndex();
-  let html = '';
+  let html = '', eyebrow = '';
   if (state.stage === 'problems') {
+    eyebrow = `문제점 · ${idx + 1} / ${seq.length}`;
     if (state.focus == null) {
       html = `<h3>${STAGES.problems.title}</h3><p>${STAGES.problems.caption}</p>`;
     } else {
@@ -473,18 +501,22 @@ function renderCard() {
     }
   } else {
     const v = currentView();
+    const g = v?.group;
+    const inG = g ? STAGES[state.stage].views.filter((x) => x.group === g && CAMS[x.cam]) : [];
+    eyebrow = g ? `${g} · ${inG.indexOf(v) + 1} / ${inG.length}` : `${STAGES[state.stage].title} · ${idx + 1} / ${seq.length}`;
     const cmp = state.tog.has('cmp');
     html = `<h3>${v ? v.label : STAGES[state.stage].title}${cmp ? ' <em class="was">현황</em>' : ''}</h3>
       <p>${v?.desc || STAGES[state.stage].caption}</p>
       ${v?.ref ? `<p class="ref">참고 · ${v.ref}</p>` : ''}`;
   }
-  card.innerHTML = `<div class="card-top"><button class="nav" id="btn-prev" aria-label="이전 시점">‹</button>
-    <span class="count">${idx + 1} / ${seq.length}</span>
-    <button class="nav" id="btn-next" aria-label="다음 시점">›</button></div>${html}`;
-  $('#btn-prev').addEventListener('click', () => { stopTour(); goSeq(seqIndex() - 1); });
-  $('#btn-next').addEventListener('click', () => { stopTour(); goSeq(seqIndex() + 1); });
+  card.innerHTML = `<div class="eyebrow">${eyebrow}</div>${html}`;
   const sol = $('#btn-sol');
   if (sol) sol.addEventListener('click', () => { stopTour(); goSolution(PROBLEMS.find((x) => x.n === state.focus)); });
+  // 순서대로 보기: 다음 장면 이름을 버튼에
+  const last = idx >= seq.length - 1;
+  $('#next-label').textContent = last ? '처음으로' : seqLabel(seq[idx + 1]);
+  $('#btn-prev').disabled = idx === 0;
+  $('#progress i').style.width = `${((idx + 1) / seq.length) * 100}%`;
 }
 
 function setStage(stage, { fly = true } = {}) {
@@ -507,13 +539,13 @@ function setStage(stage, { fly = true } = {}) {
 const tour = { on: false, arrivedAt: 0, dwell: 4500 };
 function startTour() {
   tour.on = true; tour.arrivedAt = 0;
-  $('#btn-tour').classList.add('on'); $('#btn-tour').textContent = '■ 멈추기';
+  $('#btn-tour').classList.add('on'); $('#btn-tour').textContent = '■';
   goSeq(seqIndex() + 1);
 }
 function stopTour() {
   if (!tour.on) return;
   tour.on = false;
-  $('#btn-tour').classList.remove('on'); $('#btn-tour').textContent = '▶ 자동 둘러보기';
+  $('#btn-tour').classList.remove('on'); $('#btn-tour').textContent = '▶';
 }
 function stepTour() {
   if (!tour.on || tween || !tour.arrivedAt) return;
@@ -655,6 +687,13 @@ function bindUI() {
   $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
   $('#btn-night').addEventListener('click', () => { setNight(!night); writeHash(); });
   $('#btn-tour').addEventListener('click', () => (tour.on ? stopTour() : startTour()));
+  $('#btn-prev').addEventListener('click', () => { stopTour(); goSeq(seqIndex() - 1); });
+  $('#btn-next').addEventListener('click', () => { stopTour(); goSeq(seqIndex() + 1); });
+  $('#btn-layers').addEventListener('click', () => {
+    const lay = $('#layers'); lay.hidden = !lay.hidden;
+    $('#btn-layers').setAttribute('aria-expanded', String(!lay.hidden));
+    renderChips();
+  });
   $('#btn-motion').addEventListener('click', () => setMotion(!motion));
   $('#btn-share').addEventListener('click', async () => {
     writeHash();

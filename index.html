@@ -34,11 +34,19 @@
   <section id="panel">
     <button id="btn-fold" aria-label="패널 접기"><span></span></button>
     <div id="card" aria-live="polite"></div>
+    <div id="steps">
+      <button id="btn-prev" class="step prev" aria-label="이전 장면">‹</button>
+      <button id="btn-next" class="step next"><span class="k">다음</span><span id="next-label"></span><span class="arr">›</span></button>
+      <button id="btn-tour" class="step tour" aria-label="자동 둘러보기" title="자동 둘러보기">▶</button>
+    </div>
+    <div id="progress"><i></i></div>
+    <div id="groups" class="tabs" role="tablist"></div>
     <div id="chips" class="chips" role="list"></div>
     <div class="row">
       <div id="toggles" class="chips toggles"></div>
-      <button id="btn-tour" class="tour">▶ 자동 둘러보기</button>
+      <button id="btn-layers" class="layers" aria-expanded="false">레이어 ▾</button>
     </div>
+    <div id="layers" class="chips toggles" hidden></div>
     <nav id="stages" role="tablist">
       <button data-stage="existing" class="on" role="tab" aria-selected="true">① 현황</button>
       <button data-stage="problems" role="tab" aria-selected="false">② 문제점</button>
