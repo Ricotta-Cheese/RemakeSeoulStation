@@ -53,8 +53,6 @@ const STAGES = {
     toggles: [
       ['int', '내부 공간'],
       ['ug', '지하 공간'],
-      ['wg1', '물의 정원 A안(한글)'],
-      ['wg2', '물의 정원 B안(선형)'],
       ['tags', '3D 해설 태그'],
     ],
   },
@@ -97,12 +95,12 @@ function layersFor(state) {
     s.add('props');
     if (tog.has('int')) s.add('proposal_interior');
     if (tog.has('ug')) { s.add('proposal_ug'); s.add('ug_interiors'); }
-    if (tog.has('wg1')) s.add('wg_opt1');
-    if (tog.has('wg2')) s.add('wg_opt2');
+    s.add('water_garden');        // 물의 정원 (선형 B안으로 통합)
     if (tog.has('tags')) s.add('proposal_tags');
   } else {
     s.add('existing_station');
     s.add('existing_vehicles');   // 옥상 주차 차량 + 기존 버스 (제안에서는 공원/광장으로 바뀜)
+    s.add('existing_roads');      // 현황 도로 (제안 파일에선 버스센터 주변이 지워져서 원본에서 가져옴)
     if (tog.has('ug')) { s.add('ug_transit'); s.add('ug_interiors'); }
     if (stage === 'problems') {
       for (const p of PROBLEMS) if (focus == null || focus === p.n) s.add(p.layer);
@@ -187,6 +185,49 @@ function applyXray(id, entry) {
   }
 }
 
+/* 소품 인스턴싱: masters.glb(원본 50종, 한 번만) + instances.json(레이어별 위치 행렬) */
+let INSTANCES = {};
+let mastersPromise = null;
+function loadMasters() {
+  if (!mastersPromise) {
+    mastersPromise = gltfLoader.loadAsync(`${BASE}models/masters.glb`).then((gltf) => {
+      const map = new Map();
+      gltf.scene.traverse((o) => { if (o.name.startsWith('M__')) map.set(o.name.slice(3), o); });
+      return map;
+    });
+  }
+  return mastersPromise;
+}
+
+async function attachInstances(id, g) {
+  const data = INSTANCES[id];
+  if (!data) return;
+  const masters = await loadMasters();
+  const m4 = new THREE.Matrix4();
+  for (const [key, arr] of Object.entries(data)) {
+    const node = masters.get(THREE.PropertyBinding.sanitizeNodeName(key));
+    if (!node) { console.warn('master missing:', key); continue; }
+    const n = arr.length / 12;
+    node.traverse((mesh) => {
+      if (!mesh.isMesh) return;
+      // 재질은 레이어별로 복제 (지하 보기 반투명 처리가 레이어마다 따로 동작하도록)
+      const mat = Array.isArray(mesh.material) ? mesh.material.map((m) => m.clone()) : mesh.material.clone();
+      const im = new THREE.InstancedMesh(mesh.geometry, mat, n);
+      for (let k = 0; k < n; k++) {
+        const o = k * 12;   // [r00..r22 (9), tx, ty, tz]
+        m4.set(arr[o], arr[o + 1], arr[o + 2], arr[o + 9],
+               arr[o + 3], arr[o + 4], arr[o + 5], arr[o + 10],
+               arr[o + 6], arr[o + 7], arr[o + 8], arr[o + 11],
+               0, 0, 0, 1);
+        im.setMatrixAt(k, m4);
+      }
+      im.instanceMatrix.needsUpdate = true;
+      im.computeBoundingSphere();
+      g.add(im);
+    });
+  }
+}
+
 function loadLayer(id) {
   if (layers.has(id)) return layers.get(id).promise;
   const entry = { group: null };
@@ -197,19 +238,26 @@ function loadLayer(id) {
       (gltf) => {
         const g = gltf.scene;
         g.visible = false;
-        entry.mats = new Set();
-        g.traverse((o) => {
-          if (!o.isMesh) return;
-          if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
-          (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => entry.mats.add(m));
-        });
-        applyXray(id, entry);
-        g.updateMatrixWorld(true);
-        g.traverse((o) => { o.matrixAutoUpdate = false; });
-        scene.add(g);
-        entry.group = g;
-        pending--; updateLoadbar(); dirty = true;
-        resolve(g);
+        // Geometry Nodes로 복제 배치한 소품(나무·사람·의자 등)은 인스턴싱으로 붙임
+        attachInstances(id, g)
+          .catch((e) => console.warn('instances fail', id, e))
+          .then(() => {
+            entry.mats = new Set();
+            g.traverse((o) => {
+              if (!o.isMesh) return;
+              if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
+              if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;  // 제안 단계에서만 표시
+              (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => entry.mats.add(m));
+            });
+            applyXray(id, entry);
+            updateGround();
+            g.updateMatrixWorld(true);
+            g.traverse((o) => { o.matrixAutoUpdate = false; });
+            scene.add(g);
+            entry.group = g;
+            pending--; updateLoadbar(); dirty = true;
+            resolve(g);
+          });
       },
       undefined,
       (err) => { pending--; updateLoadbar(); console.error('load fail', id, err); reject(err); },
@@ -223,6 +271,7 @@ function updateLoadbar() { $('#loadbar').classList.toggle('on', pending > 0); }
 
 async function applyLayers() {
   const want = layersFor(state);
+  updateGround();
   const nextXray = state.tog.has('ug');
   if (nextXray !== xray) {
     xray = nextXray;
@@ -379,7 +428,6 @@ function setStage(stage) {
   state.stage = stage;
   state.focus = null;
   state.tog = new Set();
-  if (stage === 'proposal') { state.tog.add('wg1'); }
   document.querySelectorAll('#stages button').forEach((b) => b.classList.toggle('on', b.dataset.stage === stage));
   $('#stage-title').textContent = STAGES[stage].title;
   const first = stage === 'problems' ? 'CAM_P_Map' : STAGES[stage].cams[0][0];
@@ -444,7 +492,11 @@ function updateLabels() {
 let underground = false;
 function updateGround() {
   ground.visible = !(underground || xray);
-  for (const m of groundMeshes) m.visible = !underground;
+  for (const m of groundMeshes) {
+    // 기본 도로(base의 G_*)는 제안 파일 기준이라 버스센터 주변이 비어 있음 -> 현황/문제점에서는 원본 도로(existing_roads)를 대신 사용
+    const hiddenByStage = m.userData.baseRoad && state.stage !== 'proposal';
+    m.visible = !underground && !hiddenByStage;
+  }
   dirty = true;
 }
 function updateUnderground() {
@@ -478,9 +530,10 @@ renderer.setAnimationLoop(() => {
 });
 
 async function boot() {
-  [CAMS, MARKS] = await Promise.all([
+  [CAMS, MARKS, INSTANCES] = await Promise.all([
     fetch(`${BASE}data/cameras.json`).then((r) => r.json()),
     fetch(`${BASE}data/markers.json`).then((r) => r.json()),
+    fetch(`${BASE}data/instances.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
   ]);
 
   document.querySelectorAll('#stages button').forEach((b) => b.addEventListener('click', () => setStage(b.dataset.stage)));
@@ -493,7 +546,7 @@ async function boot() {
   refresh();
 
   // 첫 화면에 필요한 레이어가 모두 올라올 때까지 소개 화면 유지
-  const need = ['base', 'keep', 'existing_station'];
+  const need = ['base', 'keep', 'existing_station', 'existing_roads'];
   let done = 0;
   const bar = $('.intro-bar i');
   await Promise.all(need.map((id) => loadLayer(id).then(() => { done++; bar.style.width = `${(done / need.length) * 100}%`; })));
@@ -503,7 +556,7 @@ async function boot() {
 
   // 나머지는 백그라운드에서 미리 받아 두기 (제안 단계가 바로 뜨도록)
   const idle = window.requestIdleCallback || ((f) => setTimeout(f, 800));
-  idle(() => ['existing_vehicles', 'proposal', 'props', 'wg_opt1', 'p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => loadLayer(id).catch(() => {})));
+  idle(() => ['existing_vehicles', 'proposal', 'props', 'water_garden', 'p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => loadLayer(id).catch(() => {})));
 }
 
 boot().catch((e) => {
