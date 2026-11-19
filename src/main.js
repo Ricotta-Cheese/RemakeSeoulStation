@@ -3,104 +3,31 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
+import { STAGES, PROBLEMS, PLACES, LANDMARKS } from './content.js';
 
 const BASE = import.meta.env.BASE_URL;
 const $ = (s) => document.querySelector(s);
-
-/* ------------------------------------------------------------------ *
- *  콘텐츠 설정 (여기만 고치면 라벨/버튼이 바뀜)
- * ------------------------------------------------------------------ */
-const STAGES = {
-  existing: {
-    title: '현황',
-    caption: '<b>현재의 서울역과 주변.</b> 구역사(문화역서울284)와 신역사, 선로가 도시를 가르고 있어요.',
-    cams: [
-      ['CAM_Site_Overview', '대지 전경'],
-      ['CAM_Old_Aerial', '구역사'],
-      ['CAM_NewStation_Aerial', '신역사'],
-      ['CAM_Ref_MainEntrance', '신역사 정문 앞'],
-      ['CAM_Old_Front', '구역사 정면'],
-      ['CAM_BusCenter', '버스환승센터'],
-      ['CAM_Tracks_Close', '선로'],
-      ['CAM_Seoullo_Aerial', '서울로7017'],
-      ['CAM_Underground_Xray', '지하 환승', ['ug']],
-    ],
-    toggles: [['ug', '지하 보기']],
-  },
-  problems: {
-    title: '문제점 5가지',
-    caption: '<b>현장답사에서 찾은 다섯 가지 문제.</b> 번호를 눌러 자세히 보세요.',
-    cams: [],
-    toggles: [['ug', '지하 보기']],
-  },
-  proposal: {
-    title: '제안',
-    caption: '<b>끊어진 곳을 잇고, 머물고 싶은 역으로.</b> 레일 파크·물의 정원·새 맞이방을 제안해요.',
-    cams: [
-      ['CAM_PR_Aerial', '제안 전경'],
-      ['CAM_PR_Plaza', '광장'],
-      ['CAM_PR_Eye_Forecourt', '광장 눈높이'],
-      ['CAM_PR_WaterGarden', '물의 정원'],
-      ['CAM_PR_SkyRouteAerial', '스카이루트'],
-      ['CAM_PR_SeoulloLink2', '서울로 연결'],
-      ['CAM_PR_Eye_RailPark', '레일 파크'],
-      ['CAM_PR_BusTerminal', '버스환승센터'],
-      ['CAM_PR_Concourse', '맞이방 내부', ['int']],
-      ['CAM_PR_Atrium', '아트리움', ['int']],
-      ['CAM_PR_B1_Atrium', '선큰 아트리움', ['ug']],
-      ['CAM_PR_UG_Diagram', '지하 구조', ['ug']],
-    ],
-    toggles: [
-      ['int', '내부 공간'],
-      ['ug', '지하 공간'],
-      ['tags', '3D 해설 태그'],
-    ],
-  },
-};
-
-const PROBLEMS = [
-  { n: 1, title: '노숙 · 음주', cam: 'CAM_P1_Homeless', layer: 'p1', badge: 'P1_Badge' },
-  { n: 2, title: '종교 전도 · 집회 소음', cam: 'CAM_P2_Rally', layer: 'p2', badge: 'P2_Badge' },
-  { n: 3, title: '도로 · 정류장 단절', cam: 'CAM_P3_Road', layer: 'p3', badge: 'P3_Badge' },
-  { n: 4, title: '철도 동서 단절', cam: 'CAM_P4_Rail', layer: 'p4', badge: 'P4_Badge' },
-  { n: 5, title: '지하 환승 미로', cam: 'CAM_P5_Underground', layer: 'p5', badge: 'P5_Badge', needs: ['ug'] },
-];
-
-const PLACES = [
-  { n: '★', title: '새 서울역 · 그늘 지붕 홀', cam: 'CAM_PR_Eye_Forecourt', badge: 'PRT0_Badge' },
-  { n: 1, title: '공공 라운지 · 돌봄센터', cam: 'CAM_PR_Atrium', badge: 'PRT1_Badge', needs: ['int'] },
-  { n: 2, title: '그늘 숲 · 물거울', cam: 'CAM_PR_WaterGarden', badge: 'PRT2_Badge' },
-  { n: 3, title: '버스환승센터', cam: 'CAM_PR_BusTerminal', badge: 'PRT3_Badge' },
-  { n: 4, title: '레일 파크 (서울로7017)', cam: 'CAM_PR_SkyRouteAerial', badge: 'PRT4_Badge' },
-  { n: 5, title: '선큰 아트리움', cam: 'CAM_PR_B1_Atrium', badge: 'PRT5_Badge', needs: ['ug'] },
-];
-
-const LANDMARKS = {
-  LM_CultureStation284: '문화역서울284',
-  LM_SeoulStation_New: '서울역',
-  LM_SeoulSquare: '서울스퀘어',
-  LM_Severance: '세브란스빌딩',
-  LM_SeobuStation: '서부역',
-  LM_Seoullo_W: '서울로7017 서',
-  LM_Seoullo_E: '서울로7017 동',
-  LM_Sungnyemun: '숭례문',
-};
 
 /* 단계별로 켜지는 레이어 */
 function layersFor(state) {
   const s = new Set(['base', 'keep']);
   const { stage, tog, focus } = state;
-  if (stage === 'proposal') {
+  const showProposal = stage === 'proposal' && !tog.has('cmp');
+  if (showProposal) {
     s.add('proposal');
     s.add('props');
     if (tog.has('int')) s.add('proposal_interior');
     if (tog.has('ug')) { s.add('proposal_ug'); s.add('ug_interiors'); }
-    s.add('water_garden');        // 물의 정원 (선형 B안으로 통합)
+    s.add('water_garden');
     if (tog.has('tags')) s.add('proposal_tags');
   } else {
     s.add('existing_station');
-    s.add('existing_vehicles');   // 옥상 주차 차량 + 기존 버스 (제안에서는 공원/광장으로 바뀜)
-    s.add('existing_roads');      // 현황 도로 (제안 파일에선 버스센터 주변이 지워져서 원본에서 가져옴)
+    s.add('existing_vehicles');
+    s.add('existing_roads');
     if (tog.has('ug')) { s.add('ug_transit'); s.add('ug_interiors'); }
     if (stage === 'problems') {
       for (const p of PROBLEMS) if (focus == null || focus === p.n) s.add(p.layer);
@@ -118,21 +45,22 @@ renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
 
-const SKY = new THREE.Color(0xdbe3e8);
+const DAY = { sky: new THREE.Color(0xdbe3e8), sun: 2.1, hemi: 0.9, env: 0.55, ground: 0x777a75, emis: 1 };
+const NIGHT = { sky: new THREE.Color(0x0b1424), sun: 0.12, hemi: 0.16, env: 0.07, ground: 0x1a1f26, emis: 1.0 };
+
 const scene = new THREE.Scene();
-scene.background = SKY;
-scene.fog = new THREE.Fog(SKY, 1400, 4200);
+scene.background = DAY.sky.clone();
+scene.fog = new THREE.Fog(DAY.sky.clone(), 1400, 4200);
 scene.environment = new THREE.PMREMGenerator(renderer).fromScene(new RoomEnvironment(), 0.04).texture;
-scene.environmentIntensity = 0.55;
+scene.environmentIntensity = DAY.env;
 
-const sun = new THREE.DirectionalLight(0xfff4e0, 2.1);
+const sun = new THREE.DirectionalLight(0xfff4e0, DAY.sun);
 sun.position.set(-300, 500, 250);
-scene.add(sun, new THREE.HemisphereLight(0xdfeaf2, 0x6f6a60, 0.9));
+const hemi = new THREE.HemisphereLight(0xdfeaf2, 0x6f6a60, DAY.hemi);
+scene.add(sun, hemi);
 
-const ground = new THREE.Mesh(
-  new THREE.PlaneGeometry(9000, 9000),
-  new THREE.MeshBasicMaterial({ color: 0x777a75 }),
-);
+const groundMat = new THREE.MeshBasicMaterial({ color: DAY.ground });
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.25;
 scene.add(ground);
@@ -144,12 +72,21 @@ controls.enableDamping = true;
 controls.dampingFactor = 0.08;
 controls.screenSpacePanning = false;
 
+/* 밤 모드용 빛 번짐(블룸) — 밤에만 사용 */
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.45, 0.35, 0.97);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
 let dirty = true;
 controls.addEventListener('change', () => (dirty = true));
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
   renderer.setSize(w, h, false);
+  composer.setSize(w, h);
+  bloom.resolution.set(w / 2, h / 2);
   camera.aspect = w / h;
   camera.updateProjectionMatrix();
   dirty = true;
@@ -163,9 +100,10 @@ resize();
 const draco = new DRACOLoader().setDecoderPath(`${BASE}draco/`);
 const gltfLoader = new GLTFLoader().setDRACOLoader(draco);
 const layers = new Map();      // id -> { group, promise, mats }
-const groundMeshes = [];       // 지하 시점에서 숨길 도로/선로
+const groundMeshes = [];
 const XRAY_EXEMPT = new Set(['ug_transit', 'ug_interiors', 'proposal_ug']);
-let xray = false;              // '지하 보기'가 켜지면 지상 요소를 반투명하게
+let xray = false;
+let night = false;
 let pending = 0;
 
 function applyXray(id, entry) {
@@ -185,7 +123,16 @@ function applyXray(id, entry) {
   }
 }
 
-/* 소품 인스턴싱: masters.glb(원본 50종, 한 번만) + instances.json(레이어별 위치 행렬) */
+/* 발광 재질(조명·전광판·한지 등)은 밤에 더 밝게 */
+function applyNightMats(entry) {
+  if (!entry.mats) return;
+  for (const m of entry.mats) {
+    if (!m.emissive || m.emissive.getHex() === 0) continue;
+    if (m.userData.ei == null) m.userData.ei = m.emissiveIntensity;
+    m.emissiveIntensity = m.userData.ei * (night ? NIGHT.emis : DAY.emis);
+  }
+}
+
 let INSTANCES = {};
 let mastersPromise = null;
 function loadMasters() {
@@ -210,11 +157,10 @@ async function attachInstances(id, g) {
     const n = arr.length / 12;
     node.traverse((mesh) => {
       if (!mesh.isMesh) return;
-      // 재질은 레이어별로 복제 (지하 보기 반투명 처리가 레이어마다 따로 동작하도록)
       const mat = Array.isArray(mesh.material) ? mesh.material.map((m) => m.clone()) : mesh.material.clone();
       const im = new THREE.InstancedMesh(mesh.geometry, mat, n);
       for (let k = 0; k < n; k++) {
-        const o = k * 12;   // [r00..r22 (9), tx, ty, tz]
+        const o = k * 12;
         m4.set(arr[o], arr[o + 1], arr[o + 2], arr[o + 9],
                arr[o + 3], arr[o + 4], arr[o + 5], arr[o + 10],
                arr[o + 6], arr[o + 7], arr[o + 8], arr[o + 11],
@@ -238,7 +184,6 @@ function loadLayer(id) {
       (gltf) => {
         const g = gltf.scene;
         g.visible = false;
-        // Geometry Nodes로 복제 배치한 소품(나무·사람·의자 등)은 인스턴싱으로 붙임
         attachInstances(id, g)
           .catch((e) => console.warn('instances fail', id, e))
           .then(() => {
@@ -246,10 +191,11 @@ function loadLayer(id) {
             g.traverse((o) => {
               if (!o.isMesh) return;
               if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
-              if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;  // 제안 단계에서만 표시
+              if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;
               (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => entry.mats.add(m));
             });
             applyXray(id, entry);
+            applyNightMats(entry);
             updateGround();
             g.updateMatrixWorld(true);
             g.traverse((o) => { o.matrixAutoUpdate = false; });
@@ -287,6 +233,27 @@ async function applyLayers() {
 }
 
 /* ------------------------------------------------------------------ *
+ *  낮 / 밤
+ * ------------------------------------------------------------------ */
+function setNight(on) {
+  night = on;
+  const P = on ? NIGHT : DAY;
+  scene.background.copy(P.sky);
+  scene.fog.color.copy(P.sky);
+  sun.intensity = P.sun;
+  sun.color.set(on ? 0x9fb4ff : 0xfff4e0);
+  hemi.intensity = P.hemi;
+  scene.environmentIntensity = P.env;
+  groundMat.color.set(P.ground);
+  for (const e of layers.values()) applyNightMats(e);
+  document.body.classList.toggle('night', on);
+  $('#btn-night').setAttribute('aria-pressed', String(on));
+  $('#btn-night').textContent = on ? '☀' : '☾';
+  $('#btn-night').title = on ? '낮으로' : '밤으로';
+  dirty = true;
+}
+
+/* ------------------------------------------------------------------ *
  *  카메라 이동
  * ------------------------------------------------------------------ */
 let CAMS = {}, MARKS = {};
@@ -319,7 +286,7 @@ function flyTo(camId, { instant = false } = {}) {
   if (!c || c.ortho) return;
   const pos = V(c.pos);
   let target = V(c.target);
-  const eye = c.pos[1] < 8;           // 높이 8m 미만 = 눈높이/지하 시점
+  const eye = c.eye ?? c.pos[1] < 8;
   if (eye) target = pos.clone().add(target.clone().sub(pos).normalize().multiplyScalar(0.5));
   const to = { pos, target, fov: c.fov || 45, eye };
   if (instant) {
@@ -327,12 +294,12 @@ function flyTo(camId, { instant = false } = {}) {
     setConstraints(eye); camera.updateProjectionMatrix(); controls.update(); dirty = true;
     return;
   }
-  // 이동 중에는 제약을 풀어 둠
   controls.enabled = false;
   controls.minDistance = 0; controls.maxDistance = Infinity;
   controls.maxPolarAngle = Math.PI; controls.minPolarAngle = 0;
+  camera.near = 0.2; camera.updateProjectionMatrix();
   tween = {
-    t: 0, dur: eye ? 1.1 : 1.6,
+    t: 0, dur: eye ? 1.3 : 1.6,
     fromPos: camera.position.clone(), fromTgt: controls.target.clone(), fromFov: camera.fov,
     to,
   };
@@ -354,6 +321,7 @@ function stepTween(dt) {
     setConstraints(eye);
     controls.enabled = true;
     controls.update();
+    if (tour.on) tour.arrivedAt = performance.now();
   }
 }
 
@@ -362,43 +330,80 @@ function stepTween(dt) {
  * ------------------------------------------------------------------ */
 const state = { stage: 'existing', tog: new Set(), focus: null, cam: 'CAM_Site_Overview' };
 
+/* 현재 단계에서 차례로 넘겨 볼 수 있는 시점 목록 */
+function sequence() {
+  if (state.stage === 'problems') return [{ kind: 'map' }, ...PROBLEMS.map((p) => ({ kind: 'problem', p }))];
+  return STAGES[state.stage].views.filter((v) => CAMS[v.cam]).map((v) => ({ kind: 'view', v }));
+}
+function seqIndex() {
+  const seq = sequence();
+  if (state.stage === 'problems') return state.focus == null ? 0 : PROBLEMS.findIndex((p) => p.n === state.focus) + 1;
+  return Math.max(0, seq.findIndex((s) => s.v.cam === state.cam));
+}
+function goSeq(i) {
+  const seq = sequence();
+  const it = seq[(i + seq.length) % seq.length];
+  if (it.kind === 'map') showProblemMap();
+  else if (it.kind === 'problem') selectProblem(it.p);
+  else goView(it.v);
+}
+
 function renderChips() {
   const st = STAGES[state.stage];
   const box = $('#chips');
   box.innerHTML = '';
   if (state.stage === 'problems') {
-    box.append(chip('전체', state.focus == null, () => { state.focus = null; state.tog.delete('ug'); refresh(); flyTo('CAM_P_Map'); }));
-    for (const p of PROBLEMS) {
-      box.append(chip(`${p.n} ${p.title}`, state.focus === p.n, () => selectProblem(p)));
-    }
+    box.append(chip('전체 지도', state.focus == null, showProblemMap));
+    for (const p of PROBLEMS) box.append(chip(`${p.n} ${p.title}`, state.focus === p.n, () => selectProblem(p), 'prob'));
   } else {
-    for (const [id, label, needs] of st.cams) {
-      box.append(chip(label, state.cam === id, () => goCam(id, needs)));
+    let group = null;
+    for (const v of st.views) {
+      if (!CAMS[v.cam]) continue;
+      if (v.group && v.group !== group) {
+        group = v.group;
+        const g = document.createElement('span');
+        g.className = 'grp';
+        g.textContent = group;
+        box.append(g);
+      }
+      box.append(chip(v.label, state.cam === v.cam, () => goView(v)));
     }
   }
   const tg = $('#toggles');
   tg.innerHTML = '';
   for (const [id, label] of st.toggles) {
-    tg.append(chip(label, state.tog.has(id), () => {
+    const b = chip(label, state.tog.has(id), () => {
       state.tog.has(id) ? state.tog.delete(id) : state.tog.add(id);
       refresh();
-    }));
+    });
+    b.setAttribute('aria-pressed', String(state.tog.has(id)));
+    if (id === 'cmp') b.classList.add('cmp');
+    tg.append(b);
   }
+  // 선택된 칩이 보이도록 스크롤
+  requestAnimationFrame(() => box.querySelector('.chip.on')?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: 'smooth' }));
 }
 
-function chip(label, on, fn) {
+function chip(label, on, fn, extra = '') {
   const b = document.createElement('button');
-  b.className = 'chip' + (on ? ' on' : '');
+  b.className = 'chip' + (on ? ' on' : '') + (extra ? ' ' + extra : '');
   b.textContent = label;
-  b.addEventListener('click', fn);
+  b.addEventListener('click', () => { stopTour(); fn(); });
   return b;
 }
 
-function goCam(id, needs = []) {
-  state.cam = id;
-  for (const n of needs) state.tog.add(n);
+function goView(v) {
+  state.cam = v.cam;
+  state.tog.delete('cmp');
+  if (v.needs) for (const n of v.needs) state.tog.add(n);
+  else if (state.stage === 'proposal') { state.tog.delete('ug'); }
   refresh();
-  flyTo(id);
+  flyTo(v.cam);
+}
+
+function showProblemMap() {
+  state.focus = null; state.cam = 'CAM_P_Map'; state.tog.delete('ug');
+  refresh(); flyTo('CAM_P_Map');
 }
 
 function selectProblem(p) {
@@ -409,37 +414,116 @@ function selectProblem(p) {
   flyTo(p.cam);
 }
 
+/* 문제 → 해법: 제안 단계의 해당 시점으로 바로 이동 */
+function goSolution(p) {
+  const v = STAGES.proposal.views.find((x) => x.cam === p.sol);
+  setStage('proposal', { fly: false });
+  if (v) goView(v); else flyTo(p.sol);
+}
+
 function refresh() {
   renderChips();
-  $('#caption').innerHTML = captionText();
+  renderCard();
   applyLayers();
   buildLabels();
+  writeHash();
 }
 
-function captionText() {
-  if (state.stage === 'problems' && state.focus != null) {
-    const p = PROBLEMS.find((x) => x.n === state.focus);
-    return `<b>문제 ${p.n}. ${p.title}</b>`;
+function currentView() {
+  return STAGES[state.stage].views?.find((v) => v.cam === state.cam);
+}
+
+function renderCard() {
+  const card = $('#card');
+  const seq = sequence();
+  const idx = seqIndex();
+  let html = '';
+  if (state.stage === 'problems') {
+    if (state.focus == null) {
+      html = `<h3>${STAGES.problems.title}</h3><p>${STAGES.problems.caption}</p>`;
+    } else {
+      const p = PROBLEMS.find((x) => x.n === state.focus);
+      html = `<h3><span class="num bad">${p.n}</span>${p.title}</h3>
+        <dl><dt>어디서</dt><dd>${p.where}</dd><dt>왜</dt><dd>${p.why}</dd><dt>해법</dt><dd>${p.fix}</dd></dl>
+        <button class="sol" id="btn-sol">제안에서 해법 보기 →</button>`;
+    }
+  } else {
+    const v = currentView();
+    const cmp = state.tog.has('cmp');
+    html = `<h3>${v ? v.label : STAGES[state.stage].title}${cmp ? ' <em class="was">현황</em>' : ''}</h3>
+      <p>${v?.desc || STAGES[state.stage].caption}</p>
+      ${v?.ref ? `<p class="ref">참고 · ${v.ref}</p>` : ''}`;
   }
-  return STAGES[state.stage].caption;
+  card.innerHTML = `<div class="card-top"><button class="nav" id="btn-prev" aria-label="이전 시점">‹</button>
+    <span class="count">${idx + 1} / ${seq.length}</span>
+    <button class="nav" id="btn-next" aria-label="다음 시점">›</button></div>${html}`;
+  $('#btn-prev').addEventListener('click', () => { stopTour(); goSeq(seqIndex() - 1); });
+  $('#btn-next').addEventListener('click', () => { stopTour(); goSeq(seqIndex() + 1); });
+  const sol = $('#btn-sol');
+  if (sol) sol.addEventListener('click', () => { stopTour(); goSolution(PROBLEMS.find((x) => x.n === state.focus)); });
 }
 
-function setStage(stage) {
+function setStage(stage, { fly = true } = {}) {
   state.stage = stage;
   state.focus = null;
   state.tog = new Set();
-  document.querySelectorAll('#stages button').forEach((b) => b.classList.toggle('on', b.dataset.stage === stage));
+  document.querySelectorAll('#stages button').forEach((b) => {
+    b.classList.toggle('on', b.dataset.stage === stage);
+    b.setAttribute('aria-selected', String(b.dataset.stage === stage));
+  });
   $('#stage-title').textContent = STAGES[stage].title;
-  const first = stage === 'problems' ? 'CAM_P_Map' : STAGES[stage].cams[0][0];
+  const first = stage === 'problems' ? 'CAM_P_Map' : STAGES[stage].views[0].cam;
   state.cam = first;
-  refresh();
-  flyTo(first);
+  if (fly) { refresh(); flyTo(first); }
+}
+
+/* ------------------------------------------------------------------ *
+ *  자동 둘러보기
+ * ------------------------------------------------------------------ */
+const tour = { on: false, arrivedAt: 0, dwell: 4500 };
+function startTour() {
+  tour.on = true; tour.arrivedAt = 0;
+  $('#btn-tour').classList.add('on'); $('#btn-tour').textContent = '■ 멈추기';
+  goSeq(seqIndex() + 1);
+}
+function stopTour() {
+  if (!tour.on) return;
+  tour.on = false;
+  $('#btn-tour').classList.remove('on'); $('#btn-tour').textContent = '▶ 자동 둘러보기';
+}
+function stepTour() {
+  if (!tour.on || tween || !tour.arrivedAt) return;
+  if (performance.now() - tour.arrivedAt > tour.dwell) { tour.arrivedAt = 0; goSeq(seqIndex() + 1); }
+}
+
+/* ------------------------------------------------------------------ *
+ *  주소(#단계/시점)로 공유
+ * ------------------------------------------------------------------ */
+function writeHash() {
+  const key = state.stage === 'problems' ? (state.focus == null ? 'map' : `p${state.focus}`) : state.cam;
+  const h = `#${state.stage}/${key}${night ? '/night' : ''}`;
+  if (location.hash !== h) history.replaceState(null, '', h);
+}
+function readHash() {
+  const [stage, key, n] = location.hash.slice(1).split('/');
+  if (!STAGES[stage]) return false;
+  if (n === 'night') setNight(true);
+  setStage(stage, { fly: false });
+  if (stage === 'problems') {
+    const p = PROBLEMS.find((x) => `p${x.n}` === key);
+    if (p) { state.focus = p.n; state.cam = p.cam; if (p.needs) p.needs.forEach((t) => state.tog.add(t)); }
+  } else {
+    const v = STAGES[stage].views.find((x) => x.cam === key);
+    if (v) { state.cam = v.cam; (v.needs || []).forEach((t) => state.tog.add(t)); }
+  }
+  flyTo(state.cam, { instant: true });
+  return true;
 }
 
 /* ------------------------------------------------------------------ *
  *  3D 위치에 붙는 HTML 라벨
  * ------------------------------------------------------------------ */
-let labels = []; // { el, pos, kind }
+let labels = [];
 const labelBox = $('#labels');
 
 function buildLabels() {
@@ -454,15 +538,18 @@ function buildLabels() {
     const p = V(MARKS[key]); p.y = 30;
     labels.push({ el, pos: p, kind: 'landmark' });
   }
-  const list = state.stage === 'problems' ? PROBLEMS : state.stage === 'proposal' ? PLACES : [];
+  const showPlaces = state.stage === 'proposal' && !state.tog.has('cmp');
+  const list = state.stage === 'problems' ? PROBLEMS : showPlaces ? PLACES : [];
   for (const it of list) {
     if (!MARKS[it.badge]) continue;
-    const el = document.createElement('div');
+    const el = document.createElement('button');
     el.className = 'lbl badge' + (state.stage === 'proposal' ? ' good' : '');
     el.innerHTML = `<span class="n">${it.n}</span><span>${it.title}</span>`;
     el.addEventListener('click', () => {
+      stopTour();
       if (state.stage === 'problems') return selectProblem(it);
-      state.cam = it.cam; (it.needs || []).forEach((n) => state.tog.add(n)); refresh(); flyTo(it.cam);
+      const v = STAGES.proposal.views.find((x) => x.cam === it.cam) || { cam: it.cam, needs: it.needs };
+      goView(v);
     });
     labelBox.append(el);
     labels.push({ el, pos: V(MARKS[it.badge]), kind: 'badge' });
@@ -474,13 +561,14 @@ const _v = new THREE.Vector3();
 function updateLabels() {
   const w = window.innerWidth, h = window.innerHeight;
   const dist = camera.position.distanceTo(controls.target);
-  const aerial = dist > 90;
+  const aerial = dist > 90 && !eyeMode;
   for (const l of labels) {
     _v.copy(l.pos).project(camera);
     const behind = _v.z > 1 || _v.z < -1;
     const x = (_v.x * 0.5 + 0.5) * w, y = (-_v.y * 0.5 + 0.5) * h;
     const off = behind || x < -40 || x > w + 40 || y < -20 || y > h + 20;
-    const hide = off || (l.kind === 'landmark' && !aerial);
+    // 눈높이·실내 시점에서는 벽 너머 라벨이 겹쳐 보여서 숨김
+    const hide = off || eyeMode || (l.kind === 'landmark' && !aerial);
     l.el.classList.toggle('hide', hide);
     if (!hide) l.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -100%)`;
   }
@@ -493,8 +581,7 @@ let underground = false;
 function updateGround() {
   ground.visible = !(underground || xray);
   for (const m of groundMeshes) {
-    // 기본 도로(base의 G_*)는 제안 파일 기준이라 버스센터 주변이 비어 있음 -> 현황/문제점에서는 원본 도로(existing_roads)를 대신 사용
-    const hiddenByStage = m.userData.baseRoad && state.stage !== 'proposal';
+    const hiddenByStage = m.userData.baseRoad && (state.stage !== 'proposal' || state.tog.has('cmp'));
     m.visible = !underground && !hiddenByStage;
   }
   dirty = true;
@@ -511,23 +598,59 @@ function updateUnderground() {
 /* ------------------------------------------------------------------ *
  *  시작
  * ------------------------------------------------------------------ */
-const clock = new THREE.Clock();
-renderer.setAnimationLoop(() => {
-  const dt = Math.min(clock.getDelta(), 0.05);
+const timer = new THREE.Timer();
+renderer.setAnimationLoop((t) => {
+  timer.update(t);
+  const dt = Math.min(timer.getDelta(), 0.05);
   stepTween(dt);
+  stepTour();
   if (controls.enabled) controls.update();
   updateUnderground();
-  // 높이 올라갈수록 near를 키워 깊이 정밀도 확보 (먼 거리 겹친 면 깜빡임 방지)
   if (!eyeMode && !tween) {
     const near = THREE.MathUtils.clamp((camera.position.y - 140) * 0.25, 1, 60);
     if (Math.abs(near - camera.near) > camera.near * 0.1) { camera.near = near; camera.updateProjectionMatrix(); dirty = true; }
   }
   if (dirty) {
-    renderer.render(scene, camera);
+    if (night) composer.render(); else renderer.render(scene, camera);
     updateLabels();
     dirty = false;
   }
 });
+
+function bindUI() {
+  document.querySelectorAll('#stages button').forEach((b) => b.addEventListener('click', () => { stopTour(); setStage(b.dataset.stage); }));
+  $('#btn-fold').addEventListener('click', () => $('#panel').classList.toggle('folded'));
+  $('#btn-help').addEventListener('click', () => ($('#help').hidden = false));
+  $('#btn-help-close').addEventListener('click', () => ($('#help').hidden = true));
+  $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
+  $('#btn-night').addEventListener('click', () => { setNight(!night); writeHash(); });
+  $('#btn-tour').addEventListener('click', () => (tour.on ? stopTour() : startTour()));
+  $('#btn-share').addEventListener('click', async () => {
+    writeHash();
+    try {
+      if (navigator.share) await navigator.share({ title: document.title, url: location.href });
+      else { await navigator.clipboard.writeText(location.href); toast('이 시점의 링크를 복사했어요'); }
+    } catch { /* 공유 취소 */ }
+  });
+  canvas.addEventListener('pointerdown', stopTour);
+  window.addEventListener('keydown', (e) => {
+    if (e.target.closest('input, textarea')) return;
+    if (e.key === 'Escape') { $('#help').hidden = true; stopTour(); }
+    else if (e.key === 'ArrowRight') { stopTour(); goSeq(seqIndex() + 1); }
+    else if (e.key === 'ArrowLeft') { stopTour(); goSeq(seqIndex() - 1); }
+    else if (e.key === '1' || e.key === '2' || e.key === '3') { stopTour(); setStage(['existing', 'problems', 'proposal'][+e.key - 1]); }
+    else if (e.key === 'n' || e.key === 'N') { setNight(!night); writeHash(); }
+    else if (e.key === ' ') { e.preventDefault(); tour.on ? stopTour() : startTour(); }
+  });
+}
+
+let toastTimer = null;
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg; t.classList.add('on');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('on'), 2200);
+}
 
 async function boot() {
   [CAMS, MARKS, INSTANCES] = await Promise.all([
@@ -535,28 +658,26 @@ async function boot() {
     fetch(`${BASE}data/markers.json`).then((r) => r.json()),
     fetch(`${BASE}data/instances.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
   ]);
+  bindUI();
 
-  document.querySelectorAll('#stages button').forEach((b) => b.addEventListener('click', () => setStage(b.dataset.stage)));
-  $('#btn-fold').addEventListener('click', () => $('#panel').classList.toggle('folded'));
-  $('#btn-help').addEventListener('click', () => ($('#help').hidden = false));
-  $('#btn-help-close').addEventListener('click', () => ($('#help').hidden = true));
-
-  flyTo('CAM_Site_Overview', { instant: true });
-  state.stage = 'existing';
+  if (!readHash()) {
+    flyTo('CAM_Site_Overview', { instant: true });
+    setStage('existing', { fly: false });
+  }
   refresh();
 
-  // 첫 화면에 필요한 레이어가 모두 올라올 때까지 소개 화면 유지
-  const need = ['base', 'keep', 'existing_station', 'existing_roads'];
+  const need = ['base', 'keep', ...layersFor(state)];
+  const uniq = [...new Set(need)];
   let done = 0;
   const bar = $('.intro-bar i');
-  await Promise.all(need.map((id) => loadLayer(id).then(() => { done++; bar.style.width = `${(done / need.length) * 100}%`; })));
+  await Promise.all(uniq.map((id) => loadLayer(id).catch(() => null).then(() => { done++; bar.style.width = `${(done / uniq.length) * 100}%`; })));
   await applyLayers();
   dirty = true;
   $('#intro').classList.add('done');
 
-  // 나머지는 백그라운드에서 미리 받아 두기 (제안 단계가 바로 뜨도록)
   const idle = window.requestIdleCallback || ((f) => setTimeout(f, 800));
-  idle(() => ['existing_vehicles', 'proposal', 'props', 'water_garden', 'p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => loadLayer(id).catch(() => {})));
+  idle(() => ['existing_station', 'existing_roads', 'existing_vehicles', 'proposal', 'props', 'water_garden', 'p1', 'p2', 'p3', 'p4', 'p5', 'proposal_interior']
+    .forEach((id) => loadLayer(id).catch(() => {})));
 }
 
 boot().catch((e) => {

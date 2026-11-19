@@ -23,7 +23,8 @@
    2.13,
    -14.0
   ],
-  "fov": 54.2
+  "fov": 54.2,
+  "eye": true
  },
  "CAM_INT_Concourse": {
   "pos": [
@@ -36,7 +37,8 @@
    12.0,
    149.49
   ],
-  "fov": 67.0
+  "fov": 67.0,
+  "eye": true
  },
  "CAM_INT_Ticket": {
   "pos": [
@@ -49,7 +51,8 @@
    14.12,
    97.08
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_NewStation_Aerial": {
   "pos": [
@@ -88,7 +91,8 @@
    30.63,
    -41.75
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_Old_Front": {
   "pos": [
@@ -101,7 +105,8 @@
    8.23,
    -40.0
   ],
-  "fov": 46.8
+  "fov": 46.8,
+  "eye": true
  },
  "CAM_Old_SouthEast": {
   "pos": [
@@ -114,7 +119,8 @@
    13.7,
    -26.92
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_Overview": {
   "pos": [
@@ -245,7 +251,8 @@
    13.18,
    -0.68
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PLT_Ground": {
   "pos": [
@@ -258,7 +265,8 @@
    2.69,
    184.99
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_Aerial": {
   "pos": [
@@ -297,7 +305,8 @@
    8.24,
    77.68
   ],
-  "fov": 77.6
+  "fov": 77.6,
+  "eye": true
  },
  "CAM_PR_BusTerminal": {
   "pos": [
@@ -323,7 +332,8 @@
    11.19,
    54.9
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_PR_Concourse_Shops": {
   "pos": [
@@ -336,7 +346,8 @@
    11.63,
    125.68
   ],
-  "fov": 67.0
+  "fov": 67.0,
+  "eye": true
  },
  "CAM_PR_Connector": {
   "pos": [
@@ -375,7 +386,8 @@
    5.45,
    -3.63
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_Eye_BusTerminal": {
   "pos": [
@@ -388,7 +400,8 @@
    4.82,
    14.26
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_PR_Eye_Forecourt": {
   "pos": [
@@ -401,7 +414,8 @@
    5.6,
    -49.95
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_PR_Eye_Fountain": {
   "pos": [
@@ -414,7 +428,8 @@
    2.73,
    118.9
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_Eye_Hall": {
   "pos": [
@@ -427,7 +442,8 @@
    20.4,
    124.21
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_PR_Eye_Market": {
   "pos": [
@@ -440,7 +456,8 @@
    4.26,
    -114.26
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_Eye_RailPark": {
   "pos": [
@@ -453,7 +470,8 @@
    18.24,
    -33.99
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_PR_Eye_Steps": {
   "pos": [
@@ -466,7 +484,8 @@
    7.86,
    106.56
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_PR_Eye_WaterGarden": {
   "pos": [
@@ -479,7 +498,8 @@
    6.5,
    -99.03
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_Gallery": {
   "pos": [
@@ -492,7 +512,64 @@
    23.15,
    109.79
   ],
-  "fov": 73.7
+  "fov": 73.7,
+  "eye": true
+ },
+ "CAM_PR_Hall_Board": {
+  "pos": [
+   -100.0,
+   18.0,
+   86.0
+  ],
+  "target": [
+   -100.0,
+   29.77,
+   27.17
+  ],
+  "fov": 58.7,
+  "eye": true
+ },
+ "CAM_PR_Hall_Clock": {
+  "pos": [
+   -75.0,
+   17.8,
+   100.0
+  ],
+  "target": [
+   -29.21,
+   24.67,
+   138.16
+  ],
+  "fov": 58.7,
+  "eye": true
+ },
+ "CAM_PR_Hall_Lanterns": {
+  "pos": [
+   -128.0,
+   18.0,
+   124.0
+  ],
+  "target": [
+   -171.68,
+   19.28,
+   82.89
+  ],
+  "fov": 54.2,
+  "eye": true
+ },
+ "CAM_PR_MoonJar": {
+  "pos": [
+   84.0,
+   4.5,
+   8.0
+  ],
+  "target": [
+   45.43,
+   0.0,
+   35.86
+  ],
+  "fov": 50.2,
+  "eye": true
  },
  "CAM_PR_OculusCurtain": {
   "pos": [
@@ -505,7 +582,8 @@
    12.76,
    107.72
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_PR_OldStationDiagram": {
   "pos": [
@@ -544,7 +622,8 @@
    16.91,
    -121.07
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_SeoulloLink2": {
   "pos": [
@@ -622,7 +701,8 @@
    0.0,
    112.38
   ],
-  "fov": 38.7
+  "fov": 38.7,
+  "eye": true
  },
  "CAM_PR_UG_Domes": {
   "pos": [
@@ -635,7 +715,8 @@
    -3.39,
    122.44
   ],
-  "fov": 58.7
+  "fov": 58.7,
+  "eye": true
  },
  "CAM_PR_UG_GTXWell": {
   "pos": [
@@ -648,7 +729,8 @@
    -6.65,
    121.42
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_UG_Spine": {
   "pos": [
@@ -661,7 +743,8 @@
    -3.39,
    120.66
   ],
-  "fov": 64.0
+  "fov": 64.0,
+  "eye": true
  },
  "CAM_PR_WaterGarden": {
   "pos": [
@@ -700,7 +783,8 @@
    7.13,
    64.41
   ],
-  "fov": 50.2
+  "fov": 50.2,
+  "eye": true
  },
  "CAM_Ref_MainEntrance": {
   "pos": [
@@ -713,7 +797,8 @@
    17.29,
    140.5
   ],
-  "fov": 54.2
+  "fov": 54.2,
+  "eye": true
  },
  "CAM_Seoullo_Aerial": {
   "pos": [
@@ -778,7 +863,8 @@
    12.12,
    -508.87
   ],
-  "fov": 41.1
+  "fov": 41.1,
+  "eye": true
  },
  "CAM_Survey017": {
   "pos": [
@@ -791,7 +877,8 @@
    7.19,
    34.12
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_TopRef": {
   "ortho": true,
@@ -831,7 +918,8 @@
    -9.56,
    260.0
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_B1_Concourse": {
   "pos": [
@@ -844,7 +932,8 @@
    -4.05,
    -20.0
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_Platform_AREX": {
   "pos": [
@@ -857,7 +946,8 @@
    -50.33,
    294.0
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_Platform_GTXA": {
   "pos": [
@@ -870,7 +960,8 @@
    -53.26,
    162.48
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_Platform_L1": {
   "pos": [
@@ -883,7 +974,8 @@
    -9.32,
    -23.5
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_Platform_L4": {
   "pos": [
@@ -896,7 +988,8 @@
    -18.35,
    267.31
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_UG_Transfer": {
   "pos": [
@@ -909,7 +1002,8 @@
    -4.26,
    178.0
   ],
-  "fov": 70.2
+  "fov": 70.2,
+  "eye": true
  },
  "CAM_Underground_Xray": {
   "pos": [

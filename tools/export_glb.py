@@ -11,7 +11,7 @@
   - 제안안 파일에서 지워진 '현황' 도로는 원본 SeoulStation_Existing.blend 에서 임시로 가져옴(읽기만 함).
 레이어 구성을 바꾸려면 아래 LAYERS만 고치면 됨 (웹의 src/main.js layersFor()와 id를 맞출 것).
 """
-import bpy, os, io, json, math, contextlib
+import bpy, os, io, json, math, contextlib, re
 import numpy as np
 from mathutils import Vector
 
@@ -169,6 +169,9 @@ def unpatch():
         bc.default_value = dv
 
 
+EYE_RE = re.compile(r"(Eye_|Hall_|Concourse|OculusCurtain|Gallery|INT_|_UG_|MoonJar)")
+
+
 def y_up(v):
     return [round(v.x, 2), round(v.z, 2), round(-v.y, 2)]
 
@@ -191,6 +194,9 @@ def export_cameras_markers():
             if fwd.z < -0.05:
                 dist = min(max(-pos.z / fwd.z, 20.0), 900.0)
             cams[o.name] = {"pos": y_up(pos), "target": y_up(pos + fwd * dist), "fov": round(vfov, 1)}
+            # 눈높이(제자리 둘러보기) 시점: 지상 8m 미만이거나, 홀·대합실·지하처럼 실내에 있는 카메라
+            if pos.z < 8 or EYE_RE.search(o.name):
+                cams[o.name]["eye"] = True
         elif o.type == 'EMPTY' and o.instance_type != 'COLLECTION':
             marks[o.name] = y_up(o.matrix_world.translation)
     json.dump(cams, open(os.path.join(DATA, "cameras.json"), "w"), indent=1)
