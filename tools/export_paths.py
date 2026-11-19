@@ -184,3 +184,82 @@ json.dump(out, open(OUT, "w"), separators=(",", ":"))
 print("cars", len(out["cars"]), "buses", len(out["buses"]), "trains", len(out["trains"]),
       "train lens", sorted([t["len"] for t in out["trains"]], reverse=True)[:12],
       "KB", round(os.path.getsize(OUT) / 1024))
+
+
+# ---- 보행자: 보도·횡단보도(현황+제안), 현황 광장, 서울로7017 ----
+import random
+random.seed(7)
+transit = json.load(open(os.path.join(OSM, "transit_local_m.json")))
+out["walk"] = []
+
+
+def foot_hit(x, y):
+    n, z = hit_below(x, y, 3.5)
+    return n, z
+
+
+def foot_ok(x, y):
+    n, z = foot_hit(x, y)
+    if n and (n.startswith("G_Footways") or n.startswith("G_Area_pedestrian") or n.startswith("G_Mark_Crosswalk") or n.startswith("G_Roads") or n.startswith("G_Mark")):
+        return z + 0.02
+    return None
+
+
+for f in ground["foot"]:
+    for run in runs(resample(f["pts"], 3.0), foot_ok):
+        out["walk"].append({"st": "ep", "w": f.get("w", 2.5), "pts": [yup(p) for p in run]})
+for c in ground["cross"]:
+    s = resample(c["pts"], 2.0)
+    zs = [foot_ok(x, y) for x, y in s]
+    if all(z is not None for z in zs) and len(s) > 3:
+        out["walk"].append({"st": "ep", "w": 3.0, "cross": True, "pts": [yup((x, y, z)) for (x, y), z in zip(s, zs)]})
+
+
+def inside(poly, x, y):
+    c = False
+    for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]):
+        if (y1 > y) != (y2 > y) and x < (x2 - x1) * (y - y1) / (y2 - y1) + x1:
+            c = not c
+    return c
+
+
+# 현황 광장: 다각형 안에서 임의의 두 점을 잇는 직선 산책길 (현황 단계 전용)
+for a in ground["areas"]:
+    if a["type"] not in ("plaza", "pedestrian"):
+        continue
+    poly = [tuple(p) for p in a["pts"]]
+    xs = [p[0] for p in poly]; ys = [p[1] for p in poly]
+    area = (max(xs) - min(xs)) * (max(ys) - min(ys))
+    if area < 400:
+        continue
+    k = 40 if a["type"] == "plaza" else max(2, min(12, int(area / 1500)))
+    made = 0
+    for _ in range(k * 20):
+        if made >= k:
+            break
+        p0 = (random.uniform(min(xs), max(xs)), random.uniform(min(ys), max(ys)))
+        p1 = (random.uniform(min(xs), max(xs)), random.uniform(min(ys), max(ys)))
+        if math.dist(p0, p1) < 25 or not (inside(poly, *p0) and inside(poly, *p1)):
+            continue
+        seg = resample([p0, p1], 3.0)
+        if not all(inside(poly, x, y) for x, y in seg):
+            continue
+        st = "e" if a["type"] == "plaza" else "ep"
+        if st == "ep" and any(foot_ok(x, y) is None for x, y in seg[::3]):
+            st = "e"
+        out["walk"].append({"st": st, "w": 1.0, "pts": [yup((x, y, 0.14)) for x, y in seg]})
+        made += 1
+
+
+def deck_ok(x, y):
+    n, z = hit_below(x, y, 26.0)
+    return z + 0.02 if n and z > 12 else None
+
+
+for sl in transit["seoullo"]:
+    for run in runs(resample(sl["pts"], 3.0), deck_ok):
+        out["walk"].append({"st": "ep", "w": 3.0, "pts": [yup(p) for p in run]})
+
+json.dump(out, open(OUT, "w"), separators=(",", ":"))
+wl = lambda st: round(sum(sum(math.dist(a, b) for a, b in zip(w["pts"], w["pts"][1:])) for w in out["walk"] if st in w["st"]))
+print("walk paths", len(out["walk"]), "length e/p", wl("e"), wl("p"), "KB", round(os.path.getsize(OUT) / 1024))

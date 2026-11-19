@@ -111,6 +111,10 @@ let pending = 0;
 const walkers = createWalkers();
 let traffic = null;
 let motion = true;
+/* 현황 버스환승센터에 서 있던 버스 모델: 움직임이 켜지면 숨기고 움직이는 버스로 대신 */
+const staticBuses = [];
+const peopleMeshes = [];
+function syncStaticBuses() { for (const o of staticBuses) o.visible = !motion; }
 
 function applyXray(id, entry) {
   if (!entry.mats || XRAY_EXEMPT.has(id)) return;
@@ -127,6 +131,33 @@ function applyXray(id, entry) {
     }
     m.needsUpdate = true;
   }
+}
+
+/* 밤: 주변 건물 벽면에 창문 불빛 (격자 무늬 중 일부 칸만 켜짐, 셰이더에서 계산) */
+const WIN = { uNight: { value: 0 } };
+function addWindowGlow(m) {
+  if (m.userData.win) return;
+  m.userData.win = true;
+  m.onBeforeCompile = (sh) => {
+    sh.uniforms.uNight = WIN.uNight;
+    sh.vertexShader = sh.vertexShader
+      .replace('#include <common>', '#include <common>\nvarying vec3 vWPos;\nvarying vec3 vWN;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\nvWPos = (modelMatrix * vec4(transformed, 1.0)).xyz;\nvWN = normalize(mat3(modelMatrix) * objectNormal);');
+    sh.fragmentShader = sh.fragmentShader
+      .replace('#include <common>', '#include <common>\nuniform float uNight;\nvarying vec3 vWPos;\nvarying vec3 vWN;\nfloat wHash(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }')
+      .replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+        if (uNight > 0.0 && abs(vWN.y) < 0.35 && vWPos.y > 2.5) {
+          float h = abs(vWN.x) > abs(vWN.z) ? vWPos.z : vWPos.x;
+          vec2 cell = vec2(floor(h / 2.8), floor(vWPos.y / 3.4));
+          vec2 f = vec2(fract(h / 2.8), fract(vWPos.y / 3.4));
+          float win = step(0.2, f.x) * step(f.x, 0.8) * step(0.28, f.y) * step(f.y, 0.78);
+          float r = wHash(cell + floor(vWPos.xz / 40.0) * 17.0);
+          float lit = step(0.62, r);
+          vec3 warm = mix(vec3(1.0, 0.78, 0.48), vec3(0.85, 0.92, 1.0), step(0.9, r));
+          totalEmissiveRadiance += uNight * win * lit * warm * (0.35 + 0.4 * fract(r * 7.0));
+        }`);
+  };
+  m.needsUpdate = true;
 }
 
 /* 발광 재질(조명·전광판·한지 등)은 밤에 더 밝게 */
@@ -177,6 +208,7 @@ async function attachInstances(id, g) {
       im.computeBoundingSphere();
       im.userData.master = key;
       if (/Person_stand/.test(key)) { im.frustumCulled = false; walkers.add(im); }
+      if (/Person/.test(key)) { peopleMeshes.push(im); im.visible = motion; }   // 움직임을 끄면 사람은 모두 숨김
       g.add(im);
     });
   }
@@ -200,8 +232,10 @@ function loadLayer(id) {
               if (!o.isMesh) return;
               if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
               if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;
-              (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => entry.mats.add(m));
+              (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { entry.mats.add(m); if (/^M_Bld_/.test(m.name)) addWindowGlow(m); });
             });
+            if (id === 'existing_vehicles') g.traverse((o) => { if (/^BTC_Bus/.test(o.name)) staticBuses.push(o); });
+            syncStaticBuses();
             applyXray(id, entry);
             applyNightMats(entry);
             updateGround();
@@ -255,6 +289,7 @@ function setNight(on) {
   groundMat.color.set(P.ground);
   for (const e of layers.values()) applyNightMats(e);
   traffic?.setNight(on);
+  WIN.uNight.value = on ? 1 : 0;
   document.body.classList.toggle('night', on);
   $('#btn-night').setAttribute('aria-pressed', String(on));
   $('#btn-night').textContent = on ? '☀' : '☾';
@@ -269,7 +304,9 @@ function setMotion(on) {
   b.setAttribute('aria-pressed', String(on));
   b.classList.toggle('on', on);
   b.title = on ? '움직임 끄기' : '움직임 켜기';
-  if (!on) walkers.reset();   // 사람은 원래 자리로
+  syncStaticBuses();
+  if (!on) walkers.reset();   // 다시 켤 때 원래 자리에서 시작
+  for (const im of peopleMeshes) im.visible = on;
   dirty = true;
 }
 function syncTrafficStage() {
@@ -681,7 +718,12 @@ renderer.setAnimationLoop((t) => {
 
 function bindUI() {
   document.querySelectorAll('#stages button').forEach((b) => b.addEventListener('click', () => { stopTour(); setStage(b.dataset.stage); }));
-  $('#btn-fold').addEventListener('click', () => $('#panel').classList.toggle('folded'));
+  const fold = (on) => {
+    $('#panel').classList.toggle('folded', on);
+    document.body.classList.toggle('immersive', on);   // 위쪽 버튼도 함께 숨김
+    $('#btn-fold').setAttribute('aria-label', on ? '패널 열기' : '패널 접기');
+  };
+  $('#btn-fold').addEventListener('click', () => fold(!$('#panel').classList.contains('folded')));
   $('#btn-help').addEventListener('click', () => ($('#help').hidden = false));
   $('#btn-help-close').addEventListener('click', () => ($('#help').hidden = true));
   $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
@@ -713,6 +755,7 @@ function bindUI() {
     else if (e.key === '1' || e.key === '2' || e.key === '3') { stopTour(); setStage(['existing', 'problems', 'proposal'][+e.key - 1]); }
     else if (e.key === 'n' || e.key === 'N') { setNight(!night); writeHash(); }
     else if (e.key === 'm' || e.key === 'M') setMotion(!motion);
+    else if (e.key === 'h' || e.key === 'H') fold(!$('#panel').classList.contains('folded'));
     else if (e.key === ' ') { e.preventDefault(); tour.on ? stopTour() : startTour(); }
   });
 }
@@ -733,8 +776,11 @@ async function boot() {
     fetch(`${BASE}data/instances.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
     fetch(`${BASE}data/paths.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
-  if (PATHS) { traffic = createTraffic(scene, PATHS); traffic.setNight(night); }
-  if (import.meta.env.DEV) window.__motion = { get traffic() { return traffic; }, walkers };
+  if (PATHS) {
+    traffic = createTraffic(scene, PATHS); traffic.setNight(night);
+    loadMasters().then((m) => { traffic.addPeople(m); dirty = true; }).catch((e) => console.warn('people fail', e));
+  }
+  if (import.meta.env.DEV) window.__motion = { get traffic() { return traffic; }, walkers, camera, controls, setMotion };
   bindUI();
   // 저사양(동작 줄이기 설정) 기기는 움직임 꺼진 채로 시작
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) motion = false;

@@ -15,7 +15,7 @@ function cbox(w, h, l, x, y, z, rgb) {
   const c = new Float32Array(g.attributes.position.count * 3);
   for (let i = 0; i < c.length; i += 3) { c[i] = rgb[0]; c[i + 1] = rgb[1]; c[i + 2] = rgb[2]; }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
-  return g;
+  return g.toNonIndexed();
 }
 const W = [1, 1, 1], GL = [0.12, 0.14, 0.17], TY = [0.08, 0.08, 0.08];
 
@@ -45,9 +45,78 @@ function trainGeo() {
     cbox(2.6, 0.6, 18.0, 0, 0.35, 0, TY),
   ]);
 }
+/* 정점 색을 함수로 칠하는 지오메트리 (앞코처럼 모양을 깎은 차량용) */
+function paint(g, fn) {
+  const pos = g.attributes.position, c = new Float32Array(pos.count * 3), v = new THREE.Vector3();
+  for (let i = 0; i < pos.count; i++) { v.fromBufferAttribute(pos, i); const k = fn(v); c[i * 3] = k[0]; c[i * 3 + 1] = k[1]; c[i * 3 + 2] = k[2]; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  return g;
+}
+/* KTX: 흰 차체에 진한 파랑 띠, 동력차는 길고 낮게 깎인 앞코 */
+const KTX_NAVY = [0.06, 0.16, 0.42], SILVER = [0.78, 0.8, 0.82];
+function ktxCarGeo() {
+  return mergeGeometries([
+    cbox(2.95, 3.0, 18.4, 0, 2.05, 0, W),
+    cbox(2.97, 0.62, 17.0, 0, 2.7, 0, GL),
+    cbox(2.98, 0.42, 18.4, 0, 1.55, 0, KTX_NAVY),
+    cbox(2.6, 0.6, 18.0, 0, 0.35, 0, TY),
+    cbox(2.4, 0.2, 18.0, 0, 3.62, 0, SILVER),
+  ]);
+}
+function ktxHeadGeo() {
+  // 뒤쪽 12m는 보통 차체, 앞 7m(z 2.3~9.3)는 위·옆이 점점 좁아지는 앞코
+  const body = cbox(2.95, 3.0, 11.6, 0, 2.05, -3.5, W);
+  const band = cbox(2.98, 0.42, 11.6, 0, 1.55, -3.5, KTX_NAVY);
+  const win = cbox(2.97, 0.62, 8.0, 0, 2.7, -5.0, GL);
+  const nose = new THREE.BoxGeometry(2.95, 3.0, 7.0, 8, 8, 14);
+  const P = nose.attributes.position;
+  for (let i = 0; i < P.count; i++) {
+    let x = P.getX(i), y = P.getY(i) + 1.5, z = P.getZ(i) + 3.5;  // y 0~3, z 0~7
+    const t = z / 7;
+    x *= 1 - 0.5 * Math.pow(t, 1.6);
+    y *= 1 - 0.72 * Math.pow(t, 1.25);
+    P.setXYZ(i, x, y + 0.55, z + 2.3);
+  }
+  nose.computeVertexNormals();
+  paint(nose, (v) => {
+    const t = (v.z - 2.3) / 7, top = 3.55 * (1 - 0.72 * Math.pow(Math.max(0, t), 1.25)) + 0.55;
+    if (t > 0.08 && t < 0.62 && v.y > top - 0.75) return GL;                 // 앞 유리
+    return W;
+  });
+  return mergeGeometries([body, band, win, nose, cbox(2.6, 0.6, 18.0, 0, 0.35, 0, TY)].map((g) => g.index ? g.toNonIndexed() : g));
+}
+/* 무궁화호: 남색·주황 디젤기관차 + 둥근 지붕의 연회색 객차 (파랑·빨강 띠) */
+const LOCO_BLUE = [0.07, 0.16, 0.36], ORANGE = [0.92, 0.42, 0.1], COACH = [0.86, 0.87, 0.86], RED = [0.75, 0.12, 0.1], BLUE2 = [0.12, 0.32, 0.7];
+function roof(len, y, rgb) {
+  const g = new THREE.CylinderGeometry(1.48, 1.48, len, 16, 1, false, -Math.PI / 2, Math.PI);
+  g.rotateX(-Math.PI / 2); g.scale(1, 0.32, 1); g.translate(0, y, 0);   // 위쪽 반원
+  return paint(g.toNonIndexed(), () => rgb);
+}
+function mugCoachGeo() {
+  return mergeGeometries([
+    cbox(2.95, 2.75, 18.8, 0, 1.95, 0, COACH),
+    roof(18.8, 3.32, [0.7, 0.72, 0.72]),
+    cbox(2.97, 0.8, 17.6, 0, 2.5, 0, GL),
+    cbox(2.98, 0.32, 18.8, 0, 1.45, 0, BLUE2),
+    cbox(2.98, 0.1, 18.8, 0, 1.68, 0, RED),
+    cbox(2.6, 0.6, 18.4, 0, 0.35, 0, TY),
+  ].map((g) => g.index ? g.toNonIndexed() : g));
+}
+function mugLocoGeo() {
+  return mergeGeometries([
+    cbox(2.9, 2.9, 15.0, 0, 2.05, -1.6, LOCO_BLUE),
+    cbox(2.92, 0.5, 15.0, 0, 1.6, -1.6, ORANGE),
+    cbox(2.9, 3.1, 3.2, 0, 2.15, 7.4, LOCO_BLUE),          // 운전실
+    cbox(2.6, 0.9, 0.06, 0, 3.0, 9.02, GL),                  // 앞 유리
+    cbox(2.92, 0.5, 3.2, 0, 1.6, 7.4, ORANGE),
+    cbox(2.94, 0.9, 0.08, 0, 1.15, 9.03, ORANGE),            // 앞면 주황
+    roof(15.0, 3.5, [0.2, 0.22, 0.26]),
+    cbox(2.6, 0.7, 18.4, 0, 0.4, 0, TY),
+  ].map((g) => (g.index ? g.toNonIndexed() : g)));
+}
 function lampGeo(len, w, y, back) {
   const g = [];
-  for (const s of [-1, 1]) g.push(new THREE.BoxGeometry(0.28, 0.16, 0.06).translate(s * w, y, back ? -len : len));
+  for (const s of [-1, 1]) g.push(new THREE.BoxGeometry(0.28, 0.16, 0.06).translate(s * w, y, back ? -len : len).toNonIndexed());
   return mergeGeometries(g);
 }
 
@@ -107,6 +176,14 @@ export function createTraffic(scene, data) {
   const car = new Fleet(scene, carGeo(), 4000, [[lampGeo(2.2, 0.62, 0.6, false), 0xfff2d0], [lampGeo(2.2, 0.62, 0.65, true), 0xff2a1a]]);
   const bus = new Fleet(scene, busGeo(), 400, [[lampGeo(5.78, 0.9, 0.7, false), 0xfff2d0], [lampGeo(5.78, 0.9, 0.8, true), 0xff2a1a]]);
   const train = new Fleet(scene, trainGeo(), 600, [[cbox(3.04, 0.12, 18.0, 0, 3.35, 0, W), 0xcfe4ff]]);
+  // 열차 종류별 칸 (현재 모델 / KTX 동력차·객차 / 무궁화호 기관차·객차)
+  const TF = {
+    gen: train,
+    ktxHead: new Fleet(scene, ktxHeadGeo(), 200, [[lampGeo(9.1, 0.55, 1.05, false), 0xfff6e0]]),
+    ktxCar: new Fleet(scene, ktxCarGeo(), 600, [[cbox(2.99, 0.08, 17.0, 0, 3.05, 0, W), 0xcfe4ff]]),
+    mugLoco: new Fleet(scene, mugLocoGeo(), 100, [[lampGeo(9.06, 0.9, 1.6, false), 0xfff2d0]]),
+    mugCar: new Fleet(scene, mugCoachGeo(), 600, [[cbox(2.99, 0.08, 17.6, 0, 2.95, 0, W), 0xffe2b0]]),
+  };
 
   /* 차로마다 차량을 같은 속도·간격으로 띄워 서로 겹치지 않게 */
   function lanesFor(list) {
@@ -131,12 +208,34 @@ export function createTraffic(scene, data) {
     const v = [];
     for (const ln of lanes) {
       const gap = rand(gapMin, gapMax);
-      const n = Math.max(1, Math.floor(ln.path.len / gap));
+      // 짧은 차로에도 꼭 한 대씩 생기지 않게: 길이에 비례한 확률로
+      const n = Math.floor(ln.path.len / gap + Math.random());
+      if (!n) continue;
       const s0 = Math.random() * gap;
       for (let i = 0; i < n; i++) v.push({ ln, s: s0 + i * gap + rand(-0.15, 0.15) * gap, col: new THREE.Color(pick(colors)) });
     }
     return v;
   }
+
+/* 현황 버스환승센터: 정차 중이던 버스 모델 자리(=정류장)를 지나는 7개 차로.
+     Blender 좌표 x = x0 - 0.03*y (도로가 살짝 휘어 있음), dir +1 북행 / -1 남행 */
+  const BTC = [
+    // 서쪽 세 차로는 구역사 정면·버스센터 눈높이 카메라 자리(y 40~46)를 피해 y 32부터 시작
+    { x0: 89.5, dir: -1, stops: [14.9, -7.0], top: 32 }, { x0: 96.5, dir: -1, stops: [23.4], top: 32 },
+    { x0: 102.7, dir: -1, stops: [-18.9, -38.6], top: 32 }, { x0: 105.6, dir: 1, stops: [0.9, -19.1] },
+    { x0: 112.6, dir: 1, stops: [24.2, 2.7, -14.7] }, { x0: 122.9, dir: -1, stops: [34.2, -42.6] },
+    { x0: 129.6, dir: 1, stops: [37.4, 15.5, 0.8, -29.1] },
+  ];
+  const btcLanes = BTC.map((l) => {
+    const ys = [];
+    const top = l.top ?? 108;
+    for (let y = -118; y <= top; y += 2) ys.push(y);
+    if (l.dir < 0) ys.reverse();
+    const path = new Path(ys.map((y) => [l.x0 - 0.03 * y, 0.12, -y]));
+    // 정류장 위치를 경로 거리로 (버스 중심이 정차 위치에 오도록)
+    const stops = l.stops.map((y) => (l.dir > 0 ? y + 118 : top - y)).sort((p, q) => p - q);
+    return { path, off: 0, v: 8.5, stops, r: { cls: 'busway' } };
+  });
 
   const sets = {};
   for (const st of ['e', 'p']) {
@@ -147,17 +246,29 @@ export function createTraffic(scene, data) {
     const mixBus = st === 'e' ? lanesFor(data.cars.filter((c) => c.st === st && c.cls === 'primary')) : [];
     sets[st] = {
       cars: spawn(carLanes, 28, 60, CAR_COLORS),
-      buses: [...spawn(busLanes, 34, 60, BUS_COLORS), ...spawn(mixBus, 220, 380, BUS_COLORS)],
+      buses: [...spawn(busLanes, 34, 60, BUS_COLORS), ...spawn(mixBus, 600, 1000, BUS_COLORS)],
+      // 정류장에 서는 버스 (앞차와 간격 유지)
+      btc: st === 'e' ? spawn(btcLanes, 40, 70, BUS_COLORS) : [],
     };
   }
   /* 기차: 선로마다 1편성(8~10칸), 방향은 선로마다 무작위, 지나간 뒤 잠시 쉬었다 다시 */
   const trains = data.trains.map((t) => {
     const path = new Path(Math.random() < 0.5 ? t.pts : [...t.pts].reverse());
-    const n = (Math.random() * 3 | 0) + 8;
-    return { path, n, v: rand(9, 15), s: rand(-path.len * 0.6, path.len), rest: 0 };
+    // 편성: 칸마다 [종류, 뒤집기]. 종류는 무작위 비율로 (KTX 40% · 무궁화호 35% · 기존 25%)
+    const r = Math.random();
+    let cars, v;
+    if (r < 0.4) {        // KTX: 앞뒤 동력차 + 객차 8
+      cars = [['ktxHead', false], ...Array(8).fill(['ktxCar', false]), ['ktxHead', true]]; v = rand(12, 17);
+    } else if (r < 0.75) { // 무궁화호: 기관차 + 객차 5~7
+      cars = [['mugLoco', false], ...Array((Math.random() * 3 | 0) + 5).fill(['mugCar', false])]; v = rand(8, 12);
+    } else {
+      cars = Array((Math.random() * 3 | 0) + 8).fill(['gen', false]); v = rand(9, 15);
+    }
+    return { path, cars, n: cars.length, v, s: rand(-path.len * 0.6, path.len), rest: 0 };
   });
 
   let stage = 'e', visible = true;
+  let crowd = null;
   const colorDirty = { car: true, bus: true };
 
   function writeColors(fleet, list) {
@@ -165,7 +276,7 @@ export function createTraffic(scene, data) {
     if (fleet.mesh.instanceColor) fleet.mesh.instanceColor.needsUpdate = true;
   }
 
-  function moveVehicles(fleet, list, dt) {
+  function moveVehicles(fleet, list, dt, commit = true) {
     let i = 0;
     for (const c of list) {
       const L = c.ln.path.len;
@@ -179,12 +290,49 @@ export function createTraffic(scene, data) {
       const sc = edge < 6 ? Math.max(0.001, edge / 6) : 1;
       place(fleet, i++, _p, _d, sc);
     }
-    fleet.setCount(list.length);
-    fleet.commit();
+    if (commit) { fleet.setCount(list.length); fleet.commit(); }
   }
 
+  /* 앞차를 따라가고 정류장에서 잠깐 서는 버스 */
+  function moveStopping(list, dt, start) {
+    const byLane = new Map();
+    for (const c of list) { if (!byLane.has(c.ln)) byLane.set(c.ln, []); byLane.get(c.ln).push(c); }
+    let i = start;
+    for (const [ln, arr] of byLane) {
+      const L = ln.path.len;
+      arr.sort((p, q) => p.s - q.s);
+      for (let k = 0; k < arr.length; k++) {
+        const c = arr[k], lead = arr[(k + 1) % arr.length];
+        if (c.v == null) { c.v = ln.v; c.wait = 0; c.served = -1; }
+        let gap = lead === c ? Infinity : (lead.s - c.s + L) % L;
+        if (c.wait > 0) { c.wait -= dt; c.v = 0; }
+        else {
+          const want = gap < 15 ? 0 : gap < 30 ? ln.v * (gap - 15) / 15 : ln.v;
+          // 다음 정류장에 다가가면 속도를 줄이고 서기
+          const nx = ln.stops.findIndex((p) => p > c.s - 0.5 && ln.stops.indexOf(p) > c.served);
+          let brake = Infinity;
+          if (nx >= 0) {
+            const d = ln.stops[nx] - c.s;
+            if (d < 0.6) { c.wait = rand(6, 12); c.served = nx; }
+            else brake = Math.sqrt(2 * 1.2 * d);
+          }
+          c.v = THREE.MathUtils.lerp(c.v, Math.min(want, brake), Math.min(1, dt * 2));
+        }
+        c.s += c.v * dt;
+        if (c.s > L) { c.s -= L; c.served = -1; }
+      }
+      for (const c of arr) {
+        ln.path.at(c.s, _p, _d);
+        const edge = Math.min(c.s, L - c.s);
+        place(bus, i++, _p, _d, edge < 6 ? Math.max(0.001, edge / 6) : 1);
+      }
+    }
+    return i;
+  }
+
+  const _back = new THREE.Vector3();
   function moveTrains(dt) {
-    let i = 0;
+    const cnt = { gen: 0, ktxHead: 0, ktxCar: 0, mugLoco: 0, mugCar: 0 };
     for (const t of trains) {
       const L = t.path.len, span = t.n * 19.5;
       if (t.rest > 0) { t.rest -= dt; continue; }
@@ -194,11 +342,11 @@ export function createTraffic(scene, data) {
         const sk = t.s - k * 19.5 - 9.75;
         if (sk < 0 || sk > L) continue;
         t.path.at(sk, _p, _d);
-        place(train, i++, _p, _d);
+        const [kind, flip] = t.cars[k];
+        place(TF[kind], cnt[kind]++, _p, flip ? _back.copy(_d).negate() : _d);
       }
     }
-    train.setCount(i);
-    train.commit();
+    for (const [k, f] of Object.entries(TF)) { f.setCount(cnt[k]); f.commit(); }
   }
 
   return {
@@ -206,18 +354,100 @@ export function createTraffic(scene, data) {
       if (st === stage) return;
       stage = st; colorDirty.car = colorDirty.bus = true;
     },
-    setVisible(v) { visible = v; car.setVisible(v); bus.setVisible(v); train.setVisible(v); },
-    setNight(on) { car.setNight(on); bus.setNight(on); train.setNight(on); },
+    setVisible(v) { visible = v; car.setVisible(v); bus.setVisible(v); for (const f of Object.values(TF)) f.setVisible(v); crowd?.setVisible(v); },
+    /* 거리 보행자: masters(사람 원본 모델)가 준비되면 붙임 */
+    addPeople(masters) {
+      if (crowd || !data.walk) return;
+      crowd = createCrowd(scene, data.walk, masters);
+      crowd.setVisible(visible);
+    },
+    setNight(on) { car.setNight(on); bus.setNight(on); for (const f of Object.values(TF)) f.setNight(on); },
     update(dt) {
       if (!visible) return;
       const S = sets[stage];
       if (colorDirty.car) { writeColors(car, S.cars); colorDirty.car = false; }
-      if (colorDirty.bus) { writeColors(bus, S.buses); colorDirty.bus = false; }
+      if (colorDirty.bus) { writeColors(bus, [...S.buses, ...S.btc]); colorDirty.bus = false; }
       moveVehicles(car, S.cars, dt);
-      moveVehicles(bus, S.buses, dt);
+      moveVehicles(bus, S.buses, dt, false);
+      const nb = moveStopping(S.btc, dt, S.buses.length);
+      bus.setCount(nb); bus.commit();
       moveTrains(dt);
+      crowd?.update(dt, stage);
     },
-    counts() { const S = sets[stage]; return { cars: S.cars.length, buses: S.buses.length, trains: trains.length }; },
+    _trains: trains,
+    counts() { const S = sets[stage]; return { cars: S.cars.length, buses: S.buses.length + S.btc.length, trains: trains.length, people: crowd?.count(stage) || 0 }; },
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ *  거리 보행자: 보도·횡단보도·광장·서울로를 따라 양방향으로 걷는 사람들
+ * ------------------------------------------------------------------ */
+function createCrowd(scene, walks, masters) {
+  const kinds = [];
+  for (let k = 0; k < 6; k++) {
+    const node = masters.get(`PRA_Person_stand_${k}`);
+    if (!node) continue;
+    const parts = [];
+    node.updateMatrixWorld(true);
+    node.traverse((m) => { if (m.isMesh) parts.push(m); });
+    kinds.push(parts);
+  }
+  if (!kinds.length) return null;
+  const people = [];
+  for (const w of walks) {
+    const fwd = new Path(w.pts);
+    if (fwd.len < 6) continue;
+    const rev = new Path([...w.pts].reverse());
+    const n = Math.max(1, Math.round(fwd.len / (w.cross ? 6 : 9)));
+    for (let i = 0; i < n; i++) {
+      const path = i % 2 ? rev : fwd;
+      people.push({
+        path, st: w.st, s: Math.random() * path.len, v: rand(1.0, 1.55),
+        off: (i % 2 ? 1 : -1) * rand(0.3, Math.max(0.4, (w.w || 2) / 2 - 0.2)),
+        kind: (Math.random() * kinds.length) | 0, ph: Math.random() * 10,
+      });
+    }
+  }
+  // 종류(사람 모델)별로 몸의 각 부분마다 InstancedMesh
+  const fleets = kinds.map((parts, k) => {
+    const cap = people.filter((p) => p.kind === k).length || 1;
+    return parts.map((m) => {
+      const im = new THREE.InstancedMesh(m.geometry, m.material, cap);
+      im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      im.frustumCulled = false; im.count = 0;
+      im.userData.local = m.matrixWorld.clone();   // 원본 안에서의 부분 위치
+      scene.add(im);
+      return im;
+    });
+  });
+  const _yaw = new THREE.Quaternion(), _pm = new THREE.Matrix4(), _one = new THREE.Vector3(1, 1, 1);
+  let t = 0, visible = true;
+  return {
+    setVisible(v) { visible = v; for (const f of fleets) for (const im of f) im.visible = v; },
+    count(stage) { return people.filter((p) => p.st.includes(stage)).length; },
+    update(dt, stage) {
+      if (!visible) return;
+      t += dt;
+      const idx = fleets.map(() => 0);
+      for (const p of people) {
+        if (!p.st.includes(stage)) continue;
+        const L = p.path.len;
+        p.s += p.v * dt;
+        if (p.s > L) p.s -= L;
+        p.path.at(p.s, _p, _d);
+        _r.set(-_d.z, 0, _d.x);
+        _p.addScaledVector(_r, p.off);
+        _p.y += Math.abs(Math.sin((t + p.ph) * p.v * 5)) * 0.04;
+        const edge = Math.min(p.s, L - p.s);
+        const sc = edge < 3 ? Math.max(0.001, edge / 3) : 1;
+        // 사람 모델의 앞은 -Z
+        _yaw.setFromAxisAngle(_up, Math.atan2(_d.x, _d.z) + Math.PI);
+        _pm.compose(_p, _yaw, _s.setScalar(sc));
+        const f = fleets[p.kind], k = idx[p.kind]++;
+        for (const im of f) { _m.multiplyMatrices(_pm, im.userData.local); im.setMatrixAt(k, _m); }
+      }
+      fleets.forEach((f, k) => { for (const im of f) { im.count = idx[k]; im.instanceMatrix.needsUpdate = true; } });
+    },
   };
 }
 
