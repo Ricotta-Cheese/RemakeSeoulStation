@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+  <meta name="theme-color" content="#e8ecee" />
+  <title>서울역 재디자인 3D</title>
+  <link rel="stylesheet" href="/src/style.css" />
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <div id="labels"></div>
+
+  <header id="hud">
+    <div class="brand">
+      <strong>서울역 재디자인</strong>
+      <span id="stage-title">현황</span>
+    </div>
+    <button id="btn-help" aria-label="사용법">?</button>
+  </header>
+
+  <div id="loadbar"><i></i></div>
+
+  <section id="panel">
+    <button id="btn-fold" aria-label="패널 접기"><span></span></button>
+    <div id="caption"></div>
+    <div id="chips" class="chips" role="list"></div>
+    <div id="toggles" class="chips toggles"></div>
+    <nav id="stages" role="tablist">
+      <button data-stage="existing" class="on" role="tab">① 현황</button>
+      <button data-stage="problems" role="tab">② 문제점</button>
+      <button data-stage="proposal" role="tab">③ 제안</button>
+    </nav>
+  </section>
+
+  <div id="help" hidden>
+    <div class="card">
+      <h2>둘러보는 방법</h2>
+      <ul>
+        <li><b>한 손가락</b> 드래그: 회전</li>
+        <li><b>두 손가락</b> 핀치: 확대/축소, 드래그: 이동</li>
+        <li>아래 <b>시점 버튼</b>을 누르면 그 장면으로 이동해요</li>
+        <li><b>눈높이 시점</b>에서는 제자리에서 둘러볼 수 있어요</li>
+      </ul>
+      <button id="btn-help-close">닫기</button>
+    </div>
+  </div>
+
+  <div id="intro">
+    <div class="intro-card">
+      <h1>서울역 재디자인</h1>
+      <p>현황 · 문제점 · 제안을 3D로 둘러보세요</p>
+      <div class="intro-bar"><i></i></div>
+      <small id="intro-msg">모델 불러오는 중…</small>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
