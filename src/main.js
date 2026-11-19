@@ -8,6 +8,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { STAGES, PROBLEMS, PLACES, LANDMARKS } from './content.js';
+import { createTraffic, createWalkers } from './traffic.js';
 
 const BASE = import.meta.env.BASE_URL;
 const $ = (s) => document.querySelector(s);
@@ -106,6 +107,11 @@ let xray = false;
 let night = false;
 let pending = 0;
 
+/* 움직임(자동차·버스·기차·사람) */
+const walkers = createWalkers();
+let traffic = null;
+let motion = true;
+
 function applyXray(id, entry) {
   if (!entry.mats || XRAY_EXEMPT.has(id)) return;
   for (const m of entry.mats) {
@@ -169,6 +175,8 @@ async function attachInstances(id, g) {
       }
       im.instanceMatrix.needsUpdate = true;
       im.computeBoundingSphere();
+      im.userData.master = key;
+      if (/Person_stand/.test(key)) { im.frustumCulled = false; walkers.add(im); }
       g.add(im);
     });
   }
@@ -246,11 +254,26 @@ function setNight(on) {
   scene.environmentIntensity = P.env;
   groundMat.color.set(P.ground);
   for (const e of layers.values()) applyNightMats(e);
+  traffic?.setNight(on);
   document.body.classList.toggle('night', on);
   $('#btn-night').setAttribute('aria-pressed', String(on));
   $('#btn-night').textContent = on ? '☀' : '☾';
   $('#btn-night').title = on ? '낮으로' : '밤으로';
   dirty = true;
+}
+
+function setMotion(on) {
+  motion = on;
+  traffic?.setVisible(on && !underground);
+  const b = $('#btn-motion');
+  b.setAttribute('aria-pressed', String(on));
+  b.classList.toggle('on', on);
+  b.title = on ? '움직임 끄기' : '움직임 켜기';
+  if (!on) walkers.reset();   // 사람은 원래 자리로
+  dirty = true;
+}
+function syncTrafficStage() {
+  traffic?.setStage(state.stage === 'proposal' && !state.tog.has('cmp') ? 'p' : 'e');
 }
 
 /* ------------------------------------------------------------------ *
@@ -422,6 +445,7 @@ function goSolution(p) {
 }
 
 function refresh() {
+  syncTrafficStage();
   renderChips();
   renderCard();
   applyLayers();
@@ -590,6 +614,7 @@ function updateUnderground() {
   const ug = camera.position.y < -0.3;
   if (ug === underground) return;
   underground = ug;
+  traffic?.setVisible(motion && !ug);
   scene.fog.far = ug ? 600 : 4200;
   scene.fog.near = ug ? 200 : 1400;
   updateGround();
@@ -604,6 +629,11 @@ renderer.setAnimationLoop((t) => {
   const dt = Math.min(timer.getDelta(), 0.05);
   stepTween(dt);
   stepTour();
+  if (motion) {
+    traffic?.update(dt);
+    walkers.update(t / 1000);
+    dirty = true;
+  }
   if (controls.enabled) controls.update();
   updateUnderground();
   if (!eyeMode && !tween) {
@@ -625,6 +655,7 @@ function bindUI() {
   $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
   $('#btn-night').addEventListener('click', () => { setNight(!night); writeHash(); });
   $('#btn-tour').addEventListener('click', () => (tour.on ? stopTour() : startTour()));
+  $('#btn-motion').addEventListener('click', () => setMotion(!motion));
   $('#btn-share').addEventListener('click', async () => {
     writeHash();
     try {
@@ -633,6 +664,8 @@ function bindUI() {
     } catch { /* 공유 취소 */ }
   });
   canvas.addEventListener('pointerdown', stopTour);
+  // 주소창에서 #단계/시점을 바꾸면 그 장면으로
+  window.addEventListener('hashchange', () => { stopTour(); if (readHash()) refresh(); });
   window.addEventListener('keydown', (e) => {
     if (e.target.closest('input, textarea')) return;
     if (e.key === 'Escape') { $('#help').hidden = true; stopTour(); }
@@ -640,6 +673,7 @@ function bindUI() {
     else if (e.key === 'ArrowLeft') { stopTour(); goSeq(seqIndex() - 1); }
     else if (e.key === '1' || e.key === '2' || e.key === '3') { stopTour(); setStage(['existing', 'problems', 'proposal'][+e.key - 1]); }
     else if (e.key === 'n' || e.key === 'N') { setNight(!night); writeHash(); }
+    else if (e.key === 'm' || e.key === 'M') setMotion(!motion);
     else if (e.key === ' ') { e.preventDefault(); tour.on ? stopTour() : startTour(); }
   });
 }
@@ -653,12 +687,19 @@ function toast(msg) {
 }
 
 async function boot() {
-  [CAMS, MARKS, INSTANCES] = await Promise.all([
+  let PATHS;
+  [CAMS, MARKS, INSTANCES, PATHS] = await Promise.all([
     fetch(`${BASE}data/cameras.json`).then((r) => r.json()),
     fetch(`${BASE}data/markers.json`).then((r) => r.json()),
     fetch(`${BASE}data/instances.json`).then((r) => (r.ok ? r.json() : {})).catch(() => ({})),
+    fetch(`${BASE}data/paths.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
+  if (PATHS) { traffic = createTraffic(scene, PATHS); traffic.setNight(night); }
+  if (import.meta.env.DEV) window.__motion = { get traffic() { return traffic; }, walkers };
   bindUI();
+  // 저사양(동작 줄이기 설정) 기기는 움직임 꺼진 채로 시작
+  if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) motion = false;
+  setMotion(motion);
 
   if (!readHash()) {
     flyTo('CAM_Site_Overview', { instant: true });
