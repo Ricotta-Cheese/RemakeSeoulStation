@@ -102,6 +102,7 @@ function layersFor(state) {
     if (tog.has('tags')) s.add('proposal_tags');
   } else {
     s.add('existing_station');
+    s.add('existing_vehicles');   // 옥상 주차 차량 + 기존 버스 (제안에서는 공원/광장으로 바뀜)
     if (tog.has('ug')) { s.add('ug_transit'); s.add('ug_interiors'); }
     if (stage === 'problems') {
       for (const p of PROBLEMS) if (focus == null || focus === p.n) s.add(p.layer);
@@ -138,7 +139,7 @@ ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.25;
 scene.add(ground);
 
-const camera = new THREE.PerspectiveCamera(45, 1, 1, 7000);
+const camera = new THREE.PerspectiveCamera(45, 1, 1, 5200);
 camera.position.set(380, 520, 300);
 const controls = new OrbitControls(camera, canvas);
 controls.enableDamping = true;
@@ -245,7 +246,9 @@ let tween = null;
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2);
 const V = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 
+let eyeMode = false;
 function setConstraints(eye) {
+  eyeMode = eye;
   if (eye) {
     controls.minDistance = 0.5; controls.maxDistance = 0.5;
     controls.rotateSpeed = -0.45;
@@ -462,6 +465,11 @@ renderer.setAnimationLoop(() => {
   stepTween(dt);
   if (controls.enabled) controls.update();
   updateUnderground();
+  // 높이 올라갈수록 near를 키워 깊이 정밀도 확보 (먼 거리 겹친 면 깜빡임 방지)
+  if (!eyeMode && !tween) {
+    const near = THREE.MathUtils.clamp((camera.position.y - 140) * 0.25, 1, 60);
+    if (Math.abs(near - camera.near) > camera.near * 0.1) { camera.near = near; camera.updateProjectionMatrix(); dirty = true; }
+  }
   if (dirty) {
     renderer.render(scene, camera);
     updateLabels();
@@ -495,7 +503,7 @@ async function boot() {
 
   // 나머지는 백그라운드에서 미리 받아 두기 (제안 단계가 바로 뜨도록)
   const idle = window.requestIdleCallback || ((f) => setTimeout(f, 800));
-  idle(() => ['proposal', 'props', 'wg_opt1', 'p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => loadLayer(id).catch(() => {})));
+  idle(() => ['existing_vehicles', 'proposal', 'props', 'wg_opt1', 'p1', 'p2', 'p3', 'p4', 'p5'].forEach((id) => loadLayer(id).catch(() => {})));
 }
 
 boot().catch((e) => {

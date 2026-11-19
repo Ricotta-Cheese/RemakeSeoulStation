@@ -35,8 +35,9 @@ LAYERS = {
     "proposal_tags": ["PR_SolutionTags", "PR_ChapterTags", "PR_OldStationDiagram"],
     "wg_opt1": ["PR_WG_Opt1_Hangul", "NL_WG_Opt1"],
     "wg_opt2": ["PR_WG_Opt2_Linear", "NL_WG_Opt2"],
-    "props": ["PR_TreeSet", "PR_ChairSet", "PR_LampSet", "PR_PeopleSet", "PR_PeopleSit", "PR_PropLib",
-              "06_People_Vehicles"],
+    "props": ["PR_TreeSet", "PR_ChairSet", "PR_LampSet", "PR_PeopleSet", "PR_PeopleSit", "PR_PropLib"],
+    # 현황·문제점에서만 표시: 옥상 주차 차량(CTX_Roof_Cars) + 기존 버스환승센터 버스(BTC_*)
+    "existing_vehicles": ["06_People_Vehicles"],
 }
 
 vl = bpy.context.view_layer
