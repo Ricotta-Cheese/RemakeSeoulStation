@@ -25,6 +25,7 @@ function layersFor(state) {
   if (showProposal) {
     s.add('seoullo_p');
     s.add('proposal');
+    s.add('canopy_changho');      // 그늘 지붕 4안 + 버스·회랑·보행로 콘크리트 띠살 지붕(Blender에서 내보냄)
     s.add('props');
     if (tog.has('int')) s.add('proposal_interior');
     if (tog.has('ug')) { s.add('proposal_ug'); s.add('ug_interiors'); }
@@ -132,7 +133,7 @@ const STATION_CLIP = [
 ];
 const stationClipMats = [];
 const nightLights = createNightLights();   // 제안안 밤 조명(옥상 가로등 · 빛나는 물 · 버스환승센터)
-const changho = createChangho();          // 그늘 지붕 칸마다 창호 살 무늬
+const changho = createChangho();          // 그늘 지붕 창호 격자(밤 한지 빛)
 const trainBoard = createTrainBoard();     // 오큘러스 둘레 원형 출발 전광판
 const XRAY_EXEMPT = new Set(['ug_transit', 'ug_interiors', 'proposal_ug']);
 let xray = false;
@@ -259,7 +260,8 @@ function loadLayer(id) {
         attachInstances(id, g)
           .catch((e) => console.warn('instances fail', id, e))
           .then(() => {
-            if (id === 'proposal') changho.attach(g);
+            if (id === 'proposal') changho.hideOld(g);
+            if (id === 'canopy_changho') changho.attach(g);
             entry.mats = new Set();
             g.traverse((o) => {
               if (!o.isMesh) return;
