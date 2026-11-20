@@ -23,7 +23,10 @@ os.makedirs(DATA, exist_ok=True)
 
 LAYERS = {
     "base": ["Buildings_Height_OSM", "Buildings_Height_Estimated", "Roads_Ground", "Rail_Tracks"],
-    "keep": ["OldStation_1925", "Seoullo7017"],
+    "keep": ["OldStation_1925"],
+    # 서울로7017: 제안안은 선로 위 구간을 레일 파크로 바꿨으므로 단계별로 따로
+    #   seoullo_p = 제안안 파일의 서울로, seoullo_e = 현황 파일(SeoulStation_Existing.blend)의 원래 서울로 (아래 EXTERNAL)
+    "seoullo_p": ["Seoullo7017"],
     "existing_station": ["SeoulStation_New", "SeoulStation_1988Minja", "Plaza_Existing", "BusTransferCenter",
                          "SeoulStation_Interior", "Parking_Detail"],
     "ug_transit": ["Underground_Transit"],
@@ -47,7 +50,8 @@ LAYERS = {
 # 제안안 파일에서는 '현황' 도로 일부(버스환승센터 주변)가 지워져 있어서,
 # 원본 현황 파일(SeoulStation_Existing.blend)의 G_* 도로를 임시로 가져와 별도 레이어로 내보냄 (원본은 읽기만 함)
 EXISTING_BLEND = os.path.join(ROOT, "SeoulStation_Existing.blend")
-EXTERNAL = {"existing_roads": (EXISTING_BLEND, lambda n: n.startswith("G_") and n != "G_Area_plaza")}
+EXTERNAL = {"existing_roads": (EXISTING_BLEND, lambda n: n.startswith("G_") and n != "G_Area_plaza"),
+            "seoullo_e": (EXISTING_BLEND, lambda n: n.startswith("SL_"))}
 tmp_objs, tmp_cols = [], []
 mats_before = set(bpy.data.materials)
 for lid, (path, pick) in EXTERNAL.items():

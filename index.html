@@ -25,7 +25,7 @@
       <button id="btn-motion" class="pill on" aria-pressed="true" title="움직임 끄기"><i></i>움직임</button>
       <button id="btn-share" class="round" aria-label="이 시점 공유" title="이 시점 링크 공유">⤴</button>
       <button id="btn-night" class="round" aria-label="밤 모드" aria-pressed="false" title="밤으로">☾</button>
-      <button id="btn-help" class="round" aria-label="사용법" title="사용법">?</button>
+      <button id="btn-help" class="round" aria-label="도움말 · 출처" title="조작법 · 참고 출처">?</button>
     </div>
   </header>
 
@@ -57,7 +57,13 @@
   <div id="toast" role="status"></div>
 
   <div id="help" hidden>
-    <div class="card">
+    <div class="card" role="dialog" aria-label="도움말">
+      <div class="htabs" role="tablist">
+        <button data-tab="use" class="on" role="tab" aria-selected="true">조작법</button>
+        <button data-tab="refs" role="tab" aria-selected="false">참고 · 출처</button>
+      </div>
+      <div class="hbody">
+      <section id="help-use">
       <h2>둘러보는 방법</h2>
       <ul>
         <li><b>드래그</b>: 회전 · <b>핀치/휠</b>: 확대·축소 · <b>두 손가락/오른쪽 드래그</b>: 이동</li>
@@ -69,6 +75,9 @@
         <li><b>☾</b> 밤 모드 · <b>⤴</b> 지금 보는 시점 링크 공유</li>
       </ul>
       <p class="keys">키보드: ← → 장면 이동 · 1 2 3 단계 · N 밤 · M 움직임 · H 패널 숨기기 · Space 자동 둘러보기</p>
+      </section>
+      <section id="help-refs" hidden></section>
+      </div>
       <button id="btn-help-close">닫기</button>
     </div>
   </div>

@@ -160,7 +160,7 @@ class Fleet {
   }
   setCount(n) { this.mesh.count = n; for (const l of this.lights) l.count = n; }
   setVisible(v) { this.mesh.visible = v; for (const l of this.lights) l.visible = v; }
-  setNight(on) { for (const l of this.lights) l.material.emissiveIntensity = on ? 3.0 : 0.4; }
+  setNightLevel(k) { for (const l of this.lights) l.material.emissiveIntensity = 0.4 + 2.6 * k; }
   commit() { this.mesh.instanceMatrix.needsUpdate = true; }
 }
 
@@ -361,7 +361,7 @@ export function createTraffic(scene, data) {
       crowd = createCrowd(scene, data.walk, masters);
       crowd.setVisible(visible);
     },
-    setNight(on) { car.setNight(on); bus.setNight(on); for (const f of Object.values(TF)) f.setNight(on); },
+    setNightLevel(k) { car.setNightLevel(k); bus.setNightLevel(k); for (const f of Object.values(TF)) f.setNightLevel(k); },
     update(dt) {
       if (!visible) return;
       const S = sets[stage];

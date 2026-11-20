@@ -9,6 +9,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { STAGES, PROBLEMS, PLACES, LANDMARKS } from './content.js';
 import { createTraffic, createWalkers } from './traffic.js';
+import { SOURCES, NOTES, PHOTOS } from './sources.js';
 
 const BASE = import.meta.env.BASE_URL;
 const $ = (s) => document.querySelector(s);
@@ -19,6 +20,7 @@ function layersFor(state) {
   const { stage, tog, focus } = state;
   const showProposal = stage === 'proposal' && !tog.has('cmp');
   if (showProposal) {
+    s.add('seoullo_p');
     s.add('proposal');
     s.add('props');
     if (tog.has('int')) s.add('proposal_interior');
@@ -26,6 +28,7 @@ function layersFor(state) {
     s.add('water_garden');
     if (tog.has('tags')) s.add('proposal_tags');
   } else {
+    s.add('seoullo_e');           // 원래 서울로7017 (선로 위 구간 포함)
     s.add('existing_station');
     s.add('existing_vehicles');
     s.add('existing_roads');
@@ -41,7 +44,8 @@ function layersFor(state) {
  *  three.js 기본 세팅
  * ------------------------------------------------------------------ */
 const canvas = $('#gl');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
+// 로그 깊이 버퍼: 몇 mm 차이로 겹친 도로·차선·광장 면이 멀리서 깜빡이며 깨져 보이던 문제(Z-파이팅) 방지
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -277,24 +281,45 @@ async function applyLayers() {
 /* ------------------------------------------------------------------ *
  *  낮 / 밤
  * ------------------------------------------------------------------ */
-function setNight(on) {
+/* 낮↔밤은 바로 바꾸지 않고 약 1.6초 동안 하늘·조명·창문 불빛·빛 번짐을 함께 서서히 바꿔요 */
+let nightK = 0;            // 0 = 낮, 1 = 밤 (애니메이션 중에는 그 사이 값)
+let nightTarget = 0;
+const NIGHT_DUR = 1.6;
+const SUN_DAY = new THREE.Color(0xfff4e0), SUN_NIGHT = new THREE.Color(0x9fb4ff);
+const GROUND_DAY = new THREE.Color(DAY.ground), GROUND_NIGHT = new THREE.Color(NIGHT.ground);
+const lerp = THREE.MathUtils.lerp;
+function applyDayNight(k) {
+  const e = k * k * (3 - 2 * k);   // 부드러운 가감속
+  scene.background.lerpColors(DAY.sky, NIGHT.sky, e);
+  scene.fog.color.copy(scene.background);
+  sun.intensity = lerp(DAY.sun, NIGHT.sun, e);
+  sun.color.lerpColors(SUN_DAY, SUN_NIGHT, e);
+  hemi.intensity = lerp(DAY.hemi, NIGHT.hemi, e);
+  scene.environmentIntensity = lerp(DAY.env, NIGHT.env, e);
+  groundMat.color.lerpColors(GROUND_DAY, GROUND_NIGHT, e);
+  // 창문 불빛·차량 등은 하늘이 어느 정도 어두워진 뒤에 켜지게
+  const lights = THREE.MathUtils.clamp((e - 0.25) / 0.75, 0, 1);
+  WIN.uNight.value = lights;
+  traffic?.setNightLevel(lights);
+  bloom.strength = 0.45 * lights;
+  dirty = true;
+}
+function setNight(on, { instant = false } = {}) {
   night = on;
-  const P = on ? NIGHT : DAY;
-  scene.background.copy(P.sky);
-  scene.fog.color.copy(P.sky);
-  sun.intensity = P.sun;
-  sun.color.set(on ? 0x9fb4ff : 0xfff4e0);
-  hemi.intensity = P.hemi;
-  scene.environmentIntensity = P.env;
-  groundMat.color.set(P.ground);
+  nightTarget = on ? 1 : 0;
+  if (instant) { nightK = nightTarget; applyDayNight(nightK); }
   for (const e of layers.values()) applyNightMats(e);
-  traffic?.setNight(on);
-  WIN.uNight.value = on ? 1 : 0;
   document.body.classList.toggle('night', on);
   $('#btn-night').setAttribute('aria-pressed', String(on));
   $('#btn-night').textContent = on ? '☀' : '☾';
   $('#btn-night').title = on ? '낮으로' : '밤으로';
   dirty = true;
+}
+function stepDayNight(dt) {
+  if (nightK === nightTarget) return;
+  const d = dt / NIGHT_DUR;
+  nightK = nightTarget > nightK ? Math.min(nightTarget, nightK + d) : Math.max(nightTarget, nightK - d);
+  applyDayNight(nightK);
 }
 
 function setMotion(on) {
@@ -600,7 +625,7 @@ function writeHash() {
 function readHash() {
   const [stage, key, n] = location.hash.slice(1).split('/');
   if (!STAGES[stage]) return false;
-  if (n === 'night') setNight(true);
+  if (n === 'night') setNight(true, { instant: true });
   setStage(stage, { fly: false });
   if (stage === 'problems') {
     const p = PROBLEMS.find((x) => `p${x.n}` === key);
@@ -697,6 +722,7 @@ renderer.setAnimationLoop((t) => {
   timer.update(t);
   const dt = Math.min(timer.getDelta(), 0.05);
   stepTween(dt);
+  stepDayNight(dt);
   stepTour();
   if (motion) {
     traffic?.update(dt);
@@ -710,7 +736,7 @@ renderer.setAnimationLoop((t) => {
     if (Math.abs(near - camera.near) > camera.near * 0.1) { camera.near = near; camera.updateProjectionMatrix(); dirty = true; }
   }
   if (dirty) {
-    if (night) composer.render(); else renderer.render(scene, camera);
+    if (nightK > 0.01) composer.render(); else renderer.render(scene, camera);
     updateLabels();
     dirty = false;
   }
@@ -725,6 +751,24 @@ function bindUI() {
   };
   $('#btn-fold').addEventListener('click', () => fold(!$('#panel').classList.contains('folded')));
   $('#btn-help').addEventListener('click', () => ($('#help').hidden = false));
+  // 도움말 탭: 조작법 / 참고·출처
+  const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+  $('#help-refs').innerHTML = `<h2>참고 · 출처</h2>
+    <p class="lead">현황 모델, 문제점 근거, 제안 선례와 디자인 참고 자료예요. 제목을 누르면 원문이 새 탭에서 열려요.</p>
+    ${SOURCES.map((g) => `<h3>${esc(g.title)}</h3>${g.note ? `<p class="note">${esc(g.note)}</p>` : ''}
+      ${g.items.length ? `<ul class="src">${g.items.map(([t, u]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a><span>${esc(host(u))}</span></li>`).join('')}</ul>` : ''}`).join('')}
+    <h3>모델링 참고 사진 (Wikimedia Commons ${PHOTOS.reduce((n, g) => n + g.items.length, 0)}장)</h3>
+    <p class="note">모양과 재질을 맞추는 참고로 썼어요. 사진마다 저작자와 라이선스를 함께 적었어요.</p>
+    ${PHOTOS.map((g) => `<details><summary>${esc(g.group)} · ${g.items.length}장</summary><ul class="src photos">${g.items.map((p) =>
+      `<li><a href="${esc(p.u)}" target="_blank" rel="noopener">${esc(p.t)}</a><span>${esc([p.a, p.l].filter(Boolean).join(' · '))}</span></li>`).join('')}</ul></details>`).join('')}
+    <h3>알아 둘 점</h3><ul class="notes">${NOTES.map((n) => `<li>${esc(n)}</li>`).join('')}</ul>`;
+  document.querySelectorAll('.htabs button').forEach((b) => b.addEventListener('click', () => {
+    document.querySelectorAll('.htabs button').forEach((x) => { x.classList.toggle('on', x === b); x.setAttribute('aria-selected', String(x === b)); });
+    $('#help-use').hidden = b.dataset.tab !== 'use';
+    $('#help-refs').hidden = b.dataset.tab !== 'refs';
+    $('.hbody').scrollTop = 0;
+  }));
   $('#btn-help-close').addEventListener('click', () => ($('#help').hidden = true));
   $('#help').addEventListener('click', (e) => { if (e.target.id === 'help') $('#help').hidden = true; });
   $('#btn-night').addEventListener('click', () => { setNight(!night); writeHash(); });
@@ -777,7 +821,7 @@ async function boot() {
     fetch(`${BASE}data/paths.json`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
   ]);
   if (PATHS) {
-    traffic = createTraffic(scene, PATHS); traffic.setNight(night);
+    traffic = createTraffic(scene, PATHS); traffic.setNightLevel(nightK);
     loadMasters().then((m) => { traffic.addPeople(m); dirty = true; }).catch((e) => console.warn('people fail', e));
   }
   if (import.meta.env.DEV) window.__motion = { get traffic() { return traffic; }, walkers, camera, controls, setMotion };
@@ -802,7 +846,7 @@ async function boot() {
   $('#intro').classList.add('done');
 
   const idle = window.requestIdleCallback || ((f) => setTimeout(f, 800));
-  idle(() => ['existing_station', 'existing_roads', 'existing_vehicles', 'proposal', 'props', 'water_garden', 'p1', 'p2', 'p3', 'p4', 'p5', 'proposal_interior']
+  idle(() => ['seoullo_e', 'seoullo_p', 'existing_station', 'existing_roads', 'existing_vehicles', 'proposal', 'props', 'water_garden', 'p1', 'p2', 'p3', 'p4', 'p5', 'proposal_interior']
     .forEach((id) => loadLayer(id).catch(() => {})));
 }
 
