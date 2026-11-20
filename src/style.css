@@ -148,6 +148,7 @@ body.immersive #hud * { pointer-events: none !important; }
 #stages button.on { background: var(--accent); color: var(--accent-ink); }
 
 #labels { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 2; }
+body.immersive #labels { display: none; }   /* 패널을 접으면 장소 라벨도 숨겨 화면만 보이게 */
 .lbl { position: absolute; left: 0; top: 0; will-change: transform; white-space: nowrap; font-size: 11px; font-weight: 600;
   color: #fff; background: rgba(22, 32, 42, 0.72); padding: 3px 7px; border-radius: 6px; transform: translate(-999px, -999px);
   text-shadow: none; transition: opacity .2s; }

@@ -1,4 +1,6 @@
 import * as THREE from 'three';
+import { createNightLights } from './nightlights.js';
+import { createTrainBoard } from './trainboard.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -46,6 +48,7 @@ function layersFor(state) {
 const canvas = $('#gl');
 // 로그 깊이 버퍼: 몇 mm 차이로 겹친 도로·차선·광장 면이 멀리서 깜빡이며 깨져 보이던 문제(Z-파이팅) 방지
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance', logarithmicDepthBuffer: true });
+renderer.localClippingEnabled = true;
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
 renderer.toneMapping = THREE.NeutralToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -64,11 +67,22 @@ sun.position.set(-300, 500, 250);
 const hemi = new THREE.HemisphereLight(0xdfeaf2, 0x6f6a60, DAY.hemi);
 scene.add(sun, hemi);
 
+/* 바닥판에는 제안안 지하 아트리움(중심 x48·z48, 반지름 18m) 자리에 구멍을 뚫어 둬요.
+   제안안이 아닐 때는 같은 크기의 원판(plug)으로 그 구멍을 메워요. */
+const ATRIUM = { x: 48, z: 48, r: 18 };
+const groundShape = new THREE.Shape();
+groundShape.moveTo(-4500, -4500); groundShape.lineTo(4500, -4500); groundShape.lineTo(4500, 4500); groundShape.lineTo(-4500, 4500); groundShape.closePath();
+const atriumHole = new THREE.Path();
+atriumHole.absarc(ATRIUM.x, -ATRIUM.z, ATRIUM.r, 0, Math.PI * 2, true);   // 바닥판을 눕히면 로컬 y → 월드 -z
+groundShape.holes.push(atriumHole);
 const groundMat = new THREE.MeshBasicMaterial({ color: DAY.ground });
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(9000, 9000), groundMat);
+const ground = new THREE.Mesh(new THREE.ShapeGeometry(groundShape, 48), groundMat);
 ground.rotation.x = -Math.PI / 2;
 ground.position.y = -0.25;
-scene.add(ground);
+const groundPlug = new THREE.Mesh(new THREE.CircleGeometry(ATRIUM.r + 0.05, 96), groundMat);
+groundPlug.rotation.x = -Math.PI / 2;
+groundPlug.position.set(ATRIUM.x, -0.25, ATRIUM.z);
+scene.add(ground, groundPlug);
 
 const camera = new THREE.PerspectiveCamera(45, 1, 1, 5200);
 camera.position.set(380, 520, 300);
@@ -106,6 +120,18 @@ const draco = new DRACOLoader().setDecoderPath(`${BASE}draco/`);
 const gltfLoader = new GLTFLoader().setDRACOLoader(draco);
 const layers = new Map();      // id -> { group, promise, mats }
 const groundMeshes = [];
+/* 제안안에서는 새 서울역(선로 위 덱 아래, 서쪽 유리벽 x=-189.5 안쪽)으로 들어오는
+   현황 도로·보도를 잘라내요. 다섯 평면이 모두 '안쪽'인 곳(상자 안)만 지워져요. */
+const STATION_CLIP = [
+  new THREE.Plane(new THREE.Vector3(-1, 0, 0), -189.5),  // x > -189.5
+  new THREE.Plane(new THREE.Vector3(1, 0, 0), 12),       // x < -12
+  new THREE.Plane(new THREE.Vector3(0, 0, -1), -175),    // z > -175
+  new THREE.Plane(new THREE.Vector3(0, 0, 1), -330),     // z < 330
+  new THREE.Plane(new THREE.Vector3(0, 1, 0), -10),      // y < 10
+];
+const stationClipMats = [];
+const nightLights = createNightLights();
+const trainBoard = createTrainBoard();     // 오큘러스 위 원형 출발 전광판(실내 레이어)   // 제안안 밤 조명(옥상 가로등 · 빛나는 물 · 버스환승센터)
 const XRAY_EXEMPT = new Set(['ug_transit', 'ug_interiors', 'proposal_ug']);
 let xray = false;
 let night = false;
@@ -236,6 +262,10 @@ function loadLayer(id) {
               if (!o.isMesh) return;
               if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
               if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;
+              if (id === 'base' && /^G_(Roads|Mark|Foot)/.test(o.name)) {
+                o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
+                (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { m.clipIntersection = true; stationClipMats.push(m); });
+              }
               (Array.isArray(o.material) ? o.material : [o.material]).forEach((m) => { entry.mats.add(m); if (/^M_Bld_/.test(m.name)) addWindowGlow(m); });
             });
             if (id === 'existing_vehicles') g.traverse((o) => { if (/^BTC_Bus/.test(o.name)) staticBuses.push(o); });
@@ -247,6 +277,13 @@ function loadLayer(id) {
             g.traverse((o) => { o.matrixAutoUpdate = false; });
             scene.add(g);
             entry.group = g;
+            if (id === 'proposal') nightLights.attach(g);
+            if (id === 'water_garden') nightLights.addWater(g);
+            if (id === 'proposal_interior') {
+              g.add(trainBoard.group);
+              trainBoard.group.updateMatrixWorld(true);
+              trainBoard.group.traverse((o) => { o.matrixAutoUpdate = false; });
+            }
             pending--; updateLoadbar(); dirty = true;
             resolve(g);
           });
@@ -302,6 +339,8 @@ function applyDayNight(k) {
   WIN.uNight.value = lights;
   traffic?.setNightLevel(lights);
   bloom.strength = 0.45 * lights;
+  nightLights.setLevel(lights);
+  trainBoard.setNight(lights);
   dirty = true;
 }
 function setNight(on, { instant = false } = {}) {
@@ -332,6 +371,7 @@ function setMotion(on) {
   syncStaticBuses();
   if (!on) walkers.reset();   // 다시 켤 때 원래 자리에서 시작
   for (const im of peopleMeshes) im.visible = on;
+  trainBoard.setMotion(on);   // OFF면 전광판은 한 장면에 멈춤
   dirty = true;
 }
 function syncTrafficStage() {
@@ -698,6 +738,10 @@ function updateLabels() {
 let underground = false;
 function updateGround() {
   ground.visible = !(underground || xray);
+  const proposalOn = state.stage === 'proposal' && !state.tog.has('cmp');
+  groundPlug.visible = ground.visible && !proposalOn;
+  const clip = proposalOn ? STATION_CLIP : null;
+  for (const m of stationClipMats) if (m.clippingPlanes !== clip) { m.clippingPlanes = clip; m.needsUpdate = true; }
   for (const m of groundMeshes) {
     const hiddenByStage = m.userData.baseRoad && (state.stage !== 'proposal' || state.tog.has('cmp'));
     m.visible = !underground && !hiddenByStage;
@@ -727,6 +771,7 @@ renderer.setAnimationLoop((t) => {
   if (motion) {
     traffic?.update(dt);
     walkers.update(t / 1000);
+    trainBoard.update(camera);
     dirty = true;
   }
   if (controls.enabled) controls.update();
