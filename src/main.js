@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { createNightLights } from './nightlights.js';
 import { createTrainBoard } from './trainboard.js';
+import { createChangho } from './changho.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
@@ -130,8 +131,9 @@ const STATION_CLIP = [
   new THREE.Plane(new THREE.Vector3(0, 1, 0), -10),      // y < 10
 ];
 const stationClipMats = [];
-const nightLights = createNightLights();
-const trainBoard = createTrainBoard();     // 오큘러스 위 원형 출발 전광판(실내 레이어)   // 제안안 밤 조명(옥상 가로등 · 빛나는 물 · 버스환승센터)
+const nightLights = createNightLights();   // 제안안 밤 조명(옥상 가로등 · 빛나는 물 · 버스환승센터)
+const changho = createChangho();          // 그늘 지붕 칸마다 창호 살 무늬
+const trainBoard = createTrainBoard();     // 오큘러스 둘레 원형 출발 전광판
 const XRAY_EXEMPT = new Set(['ug_transit', 'ug_interiors', 'proposal_ug']);
 let xray = false;
 let night = false;
@@ -257,6 +259,7 @@ function loadLayer(id) {
         attachInstances(id, g)
           .catch((e) => console.warn('instances fail', id, e))
           .then(() => {
+            if (id === 'proposal') changho.attach(g);
             entry.mats = new Set();
             g.traverse((o) => {
               if (!o.isMesh) return;
@@ -279,7 +282,10 @@ function loadLayer(id) {
             entry.group = g;
             if (id === 'proposal') nightLights.attach(g);
             if (id === 'water_garden') nightLights.addWater(g);
-            if (id === 'proposal_interior') {
+            if (id === 'proposal') {
+              // 오큘러스 물커튼 자리를 원형 전광판으로 바꿔요
+              const curtain = g.getObjectByName('PR_OC_WaterCurtain');
+              if (curtain) curtain.visible = false;
               g.add(trainBoard.group);
               trainBoard.group.updateMatrixWorld(true);
               trainBoard.group.traverse((o) => { o.matrixAutoUpdate = false; });
@@ -341,6 +347,7 @@ function applyDayNight(k) {
   bloom.strength = 0.45 * lights;
   nightLights.setLevel(lights);
   trainBoard.setNight(lights);
+  changho.setNight(lights);
   dirty = true;
 }
 function setNight(on, { instant = false } = {}) {

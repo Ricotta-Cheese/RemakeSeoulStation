@@ -11,6 +11,7 @@ const WARM = new THREE.Color(1.0, 0.82, 0.58);
 const COOL = new THREE.Color(0.85, 0.93, 1.0);
 const AQUA = new THREE.Color(0.45, 0.9, 1.0);
 const TEAL = new THREE.Color(0.25, 1.0, 0.8);
+const AMBER = new THREE.Color(1.0, 0.66, 0.32);   // 지하로 내려가는 아트리움: 물벽(푸른빛)과 구분되는 따뜻한 호박색
 
 function poolTexture() {
   const c = document.createElement('canvas');
@@ -98,6 +99,15 @@ export function createNightLights() {
     const v = new THREE.Vector3();
     root.traverse((o) => {
       if (!o.isMesh) return;
+      // 아트리움 물커튼은 재질을 따로 떼어 호박색으로(광장 물벽과 같은 재질을 쓰고 있어서)
+      if (/^PR_Atrium/.test(o.name) && !Array.isArray(o.material) && /WaterCurtain|AtriumCurtain|Water$/.test(o.material.name) && !o.material.userData.atrium) {   // Blender에서 다시 내보내면 MPR_AtriumCurtain·MPR_AtriumWater 이름으로 옴
+        const curtainMat = /Curtain/.test(o.material.name);
+        o.material = o.material.clone();
+        o.material.userData.atrium = true;
+        o.material.userData.nightGlow = true;
+        glowMats.push({ std: o.material, base: AMBER, gain: curtainMat ? 0.55 : 0.3 });
+        return;
+      }
       const mats = Array.isArray(o.material) ? o.material : [o.material];
       let curtain = false;
       mats.forEach((m) => {
@@ -123,8 +133,12 @@ export function createNightLights() {
   function waterPools() {
     const list = [...waterCells.values()].map(([x, y, z, n]) => [x / n, y + 0.3, z / n, 9]);
     pools(list, AQUA, 0.55);
-    // 아트리움(중심 48,48 · 반지름 18) 물커튼 둘레 광장
-    pools([[48, 0.3, 48, 30]], AQUA, 0.35);
+    // 아트리움(중심 48,48 · 반지름 18): 둘레 광장과 계단식 테라스 바닥에 호박색 빛
+    pools([[48, 0.3, 48, 28]], AMBER, 0.3);
+    pools([[48, -5.6, 44, 13], [40, -3.6, 52, 8], [56, -3.6, 52, 8], [48, -2.2, 58, 8]], AMBER, 0.5);
+    // 난간 위 가는 호박색 테두리 빛
+    const rim = new THREE.TorusGeometry(18.15, 0.05, 6, 160).rotateX(Math.PI / 2);
+    instanced(rim, glowMat(AMBER, 2.2, new THREE.Color(0.75, 0.72, 0.68)), [[48, 1.15, 48]], ([x, y, z]) => m4.compose(p.set(x, y, z), q.identity(), s.set(1, 1, 1)));
   }
 
   /* ---------- 버스환승센터 내부 ---------- */
