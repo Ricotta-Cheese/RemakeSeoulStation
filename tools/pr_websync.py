@@ -196,12 +196,24 @@ mesh_obj("PR_WS_BusPendantCords", bm_c, DARK)
 old = bpy.data.objects.get("PR_Side_SoffitLights")
 if old: old.hide_render = True; old.hide_viewport = True
 LINES = [(8, 150, 328), (-13, -173, 328), (-38, 27, 328), (-62, -173, 328), (-80, -173, 328), (-97, -173, 328), (-115, -173, 328)]
+# 위에 덱 바닥판이 실제로 있는 곳에만(덱이 잘린 구 서울역 뒤 등에서 허공에 뜨지 않게)
+from mathutils.bvhtree import BVHTree
+_bm = bmesh.new()
+for _n in ("PR_Deck_Slab", "PR_Deck_SlabExt"):
+    _o = bpy.data.objects.get(_n)
+    if _o:
+        _t = bmesh.new(); _t.from_mesh(_o.data); _t.transform(_o.matrix_world)
+        _me = bpy.data.meshes.new("_tmp"); _t.to_mesh(_me); _t.free(); _bm.from_mesh(_me); bpy.data.meshes.remove(_me)
+_slab = BVHTree.FromBMesh(_bm) if _bm.verts else None
+def covered(x, zc):
+    if _slab is None: return True
+    return all(_slab.ray_cast(B(x, 13.9, zc + dz), Vector((0, 0, 1)), 1.5)[0] is not None for dz in (-1.5, 0, 1.5))
 bm_b, bm_t = bmesh.new(), bmesh.new()
 for (x, z0, z1) in LINES:
     z = z0 + 2
     while z + 3.2 <= z1:
         zc = z + 1.6
-        if ((x + 95) / 42) ** 2 + ((zc - 115) / 56) ** 2 >= 1:
+        if ((x + 95) / 42) ** 2 + ((zc - 115) / 56) ** 2 >= 1 and covered(x, zc):
             add_box(bm_b, B(x, 14.29, zc), (0.22, 3.2, 0.04))
             add_box(bm_t, B(x, 14.315, zc), (0.5, 3.6, 0.03))
         z += 5

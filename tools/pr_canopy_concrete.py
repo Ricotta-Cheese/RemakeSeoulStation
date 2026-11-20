@@ -166,7 +166,8 @@ def plain(name, base, rough=0.6, emis=None, alpha=1.0, trans=0.0):
 M_FRAME = concrete("MPR_CF_Concrete", (0.44, 0.43, 0.41), (0.62, 0.61, 0.58))
 M_FIN = concrete("MPR_CF_Fin", (0.55, 0.54, 0.51), (0.72, 0.71, 0.68))
 M_MEMB = plain("MPR_CH_Membrane", (0.95, 0.94, 0.91), 0.7, emis=(1.0, 0.86, 0.66), trans=0.35)
-M_GLASS = plain("MPR_CC_Glass", (0.5, 0.62, 0.66), 0.05, alpha=0.35)
+M_GLASS = plain("MPR_CC_Glass", (0.45, 0.58, 0.63), 0.05, alpha=0.45)   # 옆면 유리벽이 보이게 조금 더 짙게
+M_MULL = plain("MPR_CC_Mullion", (0.2, 0.21, 0.23), 0.4)                  # 멀리언(짙은 금속)
 
 
 # ------------------------------------------------------------------ 부재 도우미
@@ -262,19 +263,29 @@ for (y, kk) in col_lines:
     xl, xr = x_span(y)
     for x in (-160.0, -95.0, -30.0):
         if not (xl + 6 < x < xr - 6) or in_oculus(x, y) or abs(y - CY) < OC_RY + 4 and abs(x - CX) < OC_RX + 4: continue
-        top = Z(x, y, kk) - 1.6
+        # 받침 윗면이 기울고 비틀린 지붕 밑면(살 핀 아래 끝)을 그대로 따라가게
+        under = lambda px, py, kk=kk: Z(px, py, kk) - 0.75
         tiers, th = 3, 0.8
-        zc = top - tiers * th
+        reach = (2.6 + 1.8 * (tiers - 1)) / 2
+        zc = min(under(x + dx, y + dy) for dx in (-reach, 0, reach) for dy in (-reach, 0, reach)) - tiers * th
         bmesh.ops.create_cone(bm_f, cap_ends=True, cap_tris=False, segments=4,
                               radius1=1.8 / math.sqrt(2), radius2=1.25 / math.sqrt(2), depth=zc - FLOOR,
                               matrix=Matrix.Translation((x, y, (FLOOR + zc) / 2)) @ Matrix.Rotation(math.pi / 4, 4, 'Z'))
+        cap = bmesh.new()
         for t in range(tiers):
             L = 2.6 + 1.8 * t
-            box(bm_f, Vector((x, y, zc + th * (t + 0.5))), (L, 1.25, th))
-            box(bm_f, Vector((x, y, zc + th * (t + 0.5))), (1.25, L, th))
+            box(cap, Vector((x, y, zc + th * (t + 0.5))), (L, 1.25, th))
+            box(cap, Vector((x, y, zc + th * (t + 0.5))), (1.25, L, th))
+        # 층 높이를 비율대로 늘여, 맨 윗면이 그 자리의 지붕 밑면에 꼭 닿게
+        for v in cap.verts:
+            s_ = (v.co.z - zc) / (tiers * th)
+            v.co.z = zc + s_ * (under(v.co.x, v.co.y) - zc)
+        me_ = bpy.data.meshes.new("tmp_cap"); cap.to_mesh(me_); cap.free()
+        bm_f.from_mesh(me_); bpy.data.meshes.remove(me_)
 
 # 둘레: 콘크리트 기둥(약 9m마다) + 처마 아래 유리벽, 네 방향 출입구
-acc, nxt = 0.0, 0.0
+acc, nxt, nxt_m = 0.0, 0.0, 0.0
+bm_mu = bmesh.new()
 for i in range(360):
     a, b = Vector((*outline(ths[i]), 0)), Vector((*outline(ths[i + 1]), 0))
     seg = (b - a).length
@@ -290,6 +301,18 @@ for i in range(360):
         za, zb = Z(a.x, a.y) - 1.6, Z(b.x, b.y) - 1.6
         bm_g.faces.new([bm_g.verts.new((a.x, a.y, FLOOR)), bm_g.verts.new((b.x, b.y, FLOOR)),
                         bm_g.verts.new((b.x, b.y, zb)), bm_g.verts.new((a.x, a.y, za))])
+        # 유리벽 멀리언(3m마다 세로) + 눈높이 위 가로대
+        yaw = math.atan2(b.y - a.y, b.x - a.x)
+        while nxt_m <= acc + seg:
+            t = (nxt_m - acc) / seg
+            x, y = a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t
+            z = Z(x, y) - 1.6
+            box(bm_mu, Vector((x, y, (FLOOR + z) / 2)), (0.12, 0.35, z - FLOOR), yaw)
+            nxt_m += 3.0
+        mid = (a + b) / 2
+        box(bm_mu, Vector((mid.x, mid.y, FLOOR + 3.2)), (seg + 0.05, 0.3, 0.12), yaw)
+    else:
+        while nxt_m <= acc + seg: nxt_m += 3.0
     acc += seg
 
 
@@ -304,6 +327,7 @@ to_obj("PR_CF_Frame", bm_f, [M_FRAME])
 to_obj("PR_CF_Sal", bm_s, [M_FIN])
 to_obj("PR_CF_Panels", bm_m, [M_MEMB, M_GLASS])
 to_obj("PR_CF_Glass", bm_g, [M_GLASS])
+to_obj("PR_CF_Mullions", bm_mu, [M_MULL])
 
 t = bpy.data.texts["pr_night.py"]
 src = t.as_string()

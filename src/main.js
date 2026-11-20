@@ -155,7 +155,7 @@ function applyXray(id, entry) {
     if (xray) {
       if (!m.userData.xr) m.userData.xr = { t: m.transparent, o: m.opacity, d: m.depthWrite };
       m.transparent = true;
-      m.opacity = Math.min(m.userData.xr.o, 0.13);
+      m.opacity = Math.min(m.userData.xr.o, 0.05);   // 지상 면을 아주 옅게: 겹겹이 쌓여도 지하 통로 안이 비쳐 보이게
       m.depthWrite = false;
     } else if (m.userData.xr) {
       const s = m.userData.xr;
@@ -261,11 +261,12 @@ function loadLayer(id) {
           .catch((e) => console.warn('instances fail', id, e))
           .then(() => {
             if (id === 'proposal') changho.hideOld(g);
-            if (id === 'canopy_changho') changho.attach(g);
+            if (id === 'canopy_changho') changho.attach(g, scene);
             entry.mats = new Set();
             g.traverse((o) => {
               if (!o.isMesh) return;
               if (/^(G_|T_)/.test(o.name)) groundMeshes.push(o);
+              if ((id === 'proposal_ug' || id === 'ug_interiors') && /^(UG_(Ceiling|Dome|DomeRim|Well)|UGI_.*Ceiling)/.test(o.name)) ugCeilings.push(o);
               if (id === 'base' && o.name.startsWith('G_')) o.userData.baseRoad = true;
               if (id === 'base' && /^G_(Roads|Mark|Foot)/.test(o.name)) {
                 o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone();
@@ -745,8 +746,10 @@ function updateLabels() {
  *  지하 시점: 지상 바닥 숨기기
  * ------------------------------------------------------------------ */
 let underground = false;
+const ugCeilings = [];   // 지하 통로·역 천장: 지하 투시로 위에서 볼 때는 걷어 내 통로 안(안내선·매장·사람)이 보이게
 function updateGround() {
   ground.visible = !(underground || xray);
+  for (const o of ugCeilings) o.visible = !(xray && !underground);
   const proposalOn = state.stage === 'proposal' && !state.tog.has('cmp');
   groundPlug.visible = ground.visible && !proposalOn;
   const clip = proposalOn ? STATION_CLIP : null;

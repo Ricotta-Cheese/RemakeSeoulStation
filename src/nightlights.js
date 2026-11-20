@@ -113,6 +113,8 @@ export function createNightLights() {
       mats.forEach((m) => {
         if (!/WaterCurtain|Water$/.test(m.name)) return;
         if (/Curtain/.test(m.name)) curtain = true;
+        // 물 면이 받침 돌 윗면과 같은 높이라(달항아리 등) 화면을 돌리면 번갈아 깜빡여서, 물을 늘 앞에 그림
+        if (/Water$/.test(m.name) && !m.polygonOffset) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -4; }
         if (m.userData.nightGlow || !m.emissive) return;
         m.userData.nightGlow = true;
         glowMats.push({ std: m, base: /Curtain/.test(m.name) ? AQUA : new THREE.Color(0.1, 0.45, 0.6), gain: /Curtain/.test(m.name) ? 0.42 : 0.8 });
@@ -185,11 +187,18 @@ export function createNightLights() {
     if (old) old.visible = false;
     const LINES = [[8, 150, 328], [-13, -173, 328], [-38, 27, 328], [-62, -173, 328], [-80, -173, 328], [-97, -173, 328], [-115, -173, 328]];
     const inOculus = (x, z) => ((x + 95) / 42) ** 2 + ((z - 115) / 56) ** 2 < 1;
+    // 위에 덱 바닥판이 실제로 있는 곳에만(덱이 잘린 구 서울역 뒤 등에서 허공에 뜨지 않게)
+    root.updateMatrixWorld(true);
+    const slabs = ['PR_Deck_Slab', 'PR_Deck_SlabExt'].map((n) => root.getObjectByName(n)).filter(Boolean);
+    const rc = new THREE.Raycaster(); rc.far = 1.5;
+    const up = new THREE.Vector3(0, 1, 0);
+    const covered = (x, z) => slabs.length === 0 ||
+      [-1.5, 0, 1.5].every((dz) => { rc.set(new THREE.Vector3(x, 13.9, z + dz), up); return rc.intersectObjects(slabs, true).length > 0; });
     const bars = [];
     for (const [x, z0, z1] of LINES) {
       for (let z = z0 + 2; z + 3.2 <= z1; z += 5) {
         const zc = z + 1.6;
-        if (inOculus(x, zc)) continue;
+        if (inOculus(x, zc) || !covered(x, zc)) continue;
         bars.push([x, zc]);
       }
     }
