@@ -5,7 +5,8 @@
  *    '출발 게이트'에 닿고, 출발하면 점점 빨라지며 게이트를 지나 사라져요.
  *    열차 옆면에 행선지·출발 시각·타는 곳이 적혀 있어요.
  *  - 바깥 면과 안쪽 면은 각각 따로 이어진 띠라서, 어느 쪽에서 봐도 열차가 왼쪽→오른쪽으로 달리고 글자가 바로 읽혀요.
- *  - 움직임 ON이면 실시간으로 달리고, OFF면 한 장면에 멈춰요. */
+ *  - 움직임 ON이면 가상 시계로 달려요: 실제보다 5배 빠르게 6초 → 3초 감속 → 5초 정차 → 3초 가속을 반복.
+ *    OFF면 한 장면에 멈춰요. */
 import * as THREE from 'three';
 
 const CX = -95, CZ = 115;          // 오큘러스 중심
@@ -215,7 +216,7 @@ export function createTrainBoard() {
     // 선로: 두 줄 레일 + 천천히 흐르는 침목
     const ry = TY + TH + 22;
     g.fillStyle = 'rgba(160,190,255,0.10)';
-    const sl = (tAnim * 40) % 36;
+    const sl = (now * 8) % 36;   // 침목은 가상 시계로 흘러, 열차가 서면 같이 멈춤
     for (let sx = -36 + sl; sx < W; sx += 36) g.fillRect(sx, ry - 9, 10, 18);
     g.fillStyle = 'rgba(160,200,255,0.45)'; g.fillRect(0, ry - 7, W, 2); g.fillRect(0, ry + 5, W, 2);
     // 게이트까지 남은 시간 눈금
@@ -285,6 +286,18 @@ export function createTrainBoard() {
 
   let live = false, last = -1;
   const t0 = performance.now();
+  /* 가상 시계: 실제 시간보다 빠르게(5배) 달리다 감속 → 5초 정차 → 가속을 반복.
+     열차 위치·남은 시간·시계가 모두 이 시계를 따라서 서로 어긋나지 않아요. */
+  const CRUISE = 6, BRAKE = 3, STOP = 5, ACCEL = 3, RATE = 5;
+  const CYCLE_T = CRUISE + BRAKE + STOP + ACCEL;
+  const ease = (x) => x * x * (3 - 2 * x);
+  function rateAt(tc) {
+    if (tc < CRUISE) return RATE;
+    if (tc < CRUISE + BRAKE) return RATE * (1 - ease((tc - CRUISE) / BRAKE));
+    if (tc < CRUISE + BRAKE + STOP) return 0;
+    return RATE * ease((tc - CRUISE - BRAKE - STOP) / ACCEL);
+  }
+  let vclock = null;
   const clockNow = () => { const d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds() + d.getMilliseconds() / 1000; };
   // 움직임 OFF일 때 늘 같은 사진: 저녁 6시 30분 장면으로 고정
   const FROZEN = 18 * 3600 + 30 * 60;
@@ -304,8 +317,11 @@ export function createTrainBoard() {
       if (camera.position.distanceToSquared(new THREE.Vector3(CX, 20, CZ)) > 700 * 700) return false;
       const t = (performance.now() - t0) / 1000;
       if (t - last < 1 / 12) return false;
+      const dt = last < 0 ? 0 : Math.min(0.25, t - last);   // 화면 밖에 있다 돌아와도 시계가 튀지 않게
       last = t;
-      draw(clockNow(), t);
+      if (vclock === null) vclock = clockNow();
+      vclock += rateAt(t % CYCLE_T) * dt;
+      draw(vclock % 86400, t);
       return true;
     },
   };
