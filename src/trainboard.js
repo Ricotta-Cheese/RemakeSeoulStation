@@ -5,7 +5,8 @@
  *    '출발 게이트'에 닿고, 출발하면 점점 빨라지며 게이트를 지나 사라져요.
  *    열차 옆면에 행선지·출발 시각·타는 곳이 적혀 있어요.
  *  - 바깥 면과 안쪽 면은 각각 따로 이어진 띠라서, 어느 쪽에서 봐도 열차가 왼쪽→오른쪽으로 달리고 글자가 바로 읽혀요.
- *  - 움직임 ON이면 가상 시계로 달려요: 실제보다 5배 빠르게 6초 → 3초 감속 → 5초 정차 → 3초 가속을 반복.
+ *  - 움직임 ON이면 열차만 연출용 가상 시계로 달려요: 10배 빠르게 10초 → 5초 감속 → 8초 정차 → 5초 가속을 반복.
+ *    큰 시계·출발 시각은 실제 시간이고, 남은 시간 카운트다운은 보여 주지 않아요.
  *    OFF면 한 장면에 멈춰요. */
 import * as THREE from 'three';
 
@@ -197,18 +198,14 @@ export function createTrainBoard() {
     else if (left < 300) { st = '탑승 중'; sc = '#3ddc84'; }
     else if (tr.delay) { st = `${tr.delay}분 지연`; sc = '#ffb02e'; }
     else { st = '정시'; sc = '#7fd1ff'; }
-    const rem = left > 0 ? `${Math.floor(left / 60)}분 ${pad(Math.floor(left) % 60)}초 후 출발` : '';
     g.textAlign = 'left'; g.font = `800 20px ${KR}`; g.fillStyle = sc;
     g.globalAlpha = left > 0 && left < 300 ? 0.6 + 0.4 * Math.abs(Math.sin(tAnim * 3)) : 1;
     g.fillText(st, x - L + 6, TY - 18);
     g.globalAlpha = 1;
-    const sw = g.measureText(st).width;
-    g.font = `600 18px ${KR}`; g.fillStyle = '#c4d2f0';
-    g.fillText(rem, x - L + 18 + sw, TY - 18);
   }
 
   // 띠 전체(가상 좌표 0..W)를 한 번 그리기
-  function paintBand(now, tAnim) {
+  function paintBand(now, tAnim, real) {
     // 배경
     const bg = g.createLinearGradient(0, 0, 0, CH);
     bg.addColorStop(0, '#040a1c'); bg.addColorStop(1, '#0a1533');
@@ -219,12 +216,10 @@ export function createTrainBoard() {
     const sl = (now * 8) % 36;   // 침목은 가상 시계로 흘러, 열차가 서면 같이 멈춤
     for (let sx = -36 + sl; sx < W; sx += 36) g.fillRect(sx, ry - 9, 10, 18);
     g.fillStyle = 'rgba(160,200,255,0.45)'; g.fillRect(0, ry - 7, W, 2); g.fillRect(0, ry + 5, W, 2);
-    // 게이트까지 남은 시간 눈금
-    g.font = `700 16px ${KR}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    // 선로 눈금(숫자 없이: 열차 움직임은 연출용 가상 시계라 실제 분과 맞지 않아서)
     for (const m of [1, 3, 5, 10, 15, 20, 25, 30]) {
       const tx = GATE - posOf(m * 60);
       g.fillStyle = 'rgba(160,200,255,0.5)'; g.fillRect(tx - 1, ry - 16, 2, 32);
-      g.fillStyle = 'rgba(190,210,255,0.75)'; g.fillText(`${m}분`, tx, ry + 26);
     }
     // 위쪽 안내 줄: 띠를 따라 반복
     g.textAlign = 'left'; g.font = `700 17px ${KR}`;
@@ -266,19 +261,20 @@ export function createTrainBoard() {
     g.textAlign = 'left'; g.font = `800 18px ${KR}`; g.fillStyle = '#9fe3ff';
     g.fillText('출발 게이트', GATE + 16, 22);
     g.font = `800 30px ${MONO}`; g.fillStyle = '#ffffff';
-    g.fillText(hms(now), GATE + 16, 54);
+    g.fillText(hms(real), GATE + 16, 54);   // 시계는 실제 시간
   }
 
   // 남은 시간(초) → 게이트 뒤 거리(px). 가까울수록 조금 더 빨리 다가오게 0.9제곱
   function posOf(left) { return W * 0.82 * Math.pow(Math.min(left, SPAN) / SPAN, 0.9); }
 
-  function draw(now, tAnim) {
+  /* now = 열차 움직임용 가상 시계, real = 실제 시계(큰 시계 표시) */
+  function draw(now, tAnim, real = now) {
     g.textBaseline = 'middle';
     for (let row = 0; row < N / COLS; row++) {
       g.save();
       g.beginPath(); g.rect(0, row * CH, CW * COLS, CH); g.clip();
       g.translate(-row * CW * COLS, row * CH);
-      paintBand(now, tAnim);
+      paintBand(now, tAnim, real);
       g.restore();
     }
     tex.needsUpdate = true;
@@ -286,9 +282,9 @@ export function createTrainBoard() {
 
   let live = false, last = -1;
   const t0 = performance.now();
-  /* 가상 시계: 실제 시간보다 빠르게(5배) 달리다 감속 → 5초 정차 → 가속을 반복.
-     열차 위치·남은 시간·시계가 모두 이 시계를 따라서 서로 어긋나지 않아요. */
-  const CRUISE = 6, BRAKE = 3, STOP = 5, ACCEL = 3, RATE = 5;
+  /* 가상 시계(열차 움직임·침목 전용): 실제보다 10배 빠르게 10초 → 5초 감속 → 8초 정차 → 5초 가속을 반복.
+     큰 시계와 출발 시각은 실제 시간 그대로라, 열차가 서도 시계는 정상으로 흘러요. */
+  const CRUISE = 10, BRAKE = 5, STOP = 8, ACCEL = 5, RATE = 10;
   const CYCLE_T = CRUISE + BRAKE + STOP + ACCEL;
   const ease = (x) => x * x * (3 - 2 * x);
   function rateAt(tc) {
@@ -321,7 +317,7 @@ export function createTrainBoard() {
       last = t;
       if (vclock === null) vclock = clockNow();
       vclock += rateAt(t % CYCLE_T) * dt;
-      draw(vclock % 86400, t);
+      draw(vclock % 86400, t, clockNow());
       return true;
     },
   };
